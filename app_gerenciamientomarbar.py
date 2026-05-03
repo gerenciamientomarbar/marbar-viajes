@@ -170,18 +170,26 @@ st.sidebar.markdown("---")
 st.sidebar.header("📊 Resumen de Gestión")
 try:
     df_excel = pd.read_excel("Base_Datos_Viajes_Marbar.xlsx")
+    
+    # Buscamos la fecha de hoy y el mes actual
     fecha_hoy_str = datetime.now().strftime("%d/%m/%Y")
+    mes_actual_str = datetime.now().strftime("/%m/%Y") 
     
-    viajes_hoy = df_excel[df_excel['Fecha'].astype(str).str.startswith(fecha_hoy_str, na=False)]
+    # Filtramos
+    viajes_hoy = df_excel[df_excel['Fecha'].astype(str).str.contains(fecha_hoy_str, na=False)]
+    viajes_mes = df_excel[df_excel['Fecha'].astype(str).str.contains(mes_actual_str, na=False)]
+    
     cantidad_hoy = len(viajes_hoy)
+    cantidad_mes = len(viajes_mes)
     
+    # Mostramos los dos números grandes
     st.sidebar.metric("Viajes registrados HOY", cantidad_hoy)
+    st.sidebar.metric("Viajes de este MES", cantidad_mes)
     
     if cantidad_hoy > 0:
         st.sidebar.write("Choferes en ruta hoy:")
         st.sidebar.dataframe(viajes_hoy[['Chofer', 'Destino', 'Estado']])
         
-    # Agregamos el botón aquí, cuando sabemos que el archivo Excel existe
     st.sidebar.markdown("---")
     with open("Base_Datos_Viajes_Marbar.xlsx", "rb") as archivo_excel:
         st.sidebar.download_button(
