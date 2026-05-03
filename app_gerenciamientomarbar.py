@@ -165,14 +165,13 @@ if st.button("CONFIRMAR Y GUARDAR VIAJE"):
             st.balloons()
             st.success(f"¡Éxito! Viaje ID {nuevo_id} registrado en el sistema de Marbar.")
 
-# --- 6. PANEL LATERAL (RESUMEN) ---
+# --- 6. PANEL LATERAL (RESUMEN Y DESCARGA) ---
 st.sidebar.markdown("---")
 st.sidebar.header("📊 Resumen de Gestión")
 try:
     df_excel = pd.read_excel("Base_Datos_Viajes_Marbar.xlsx")
     fecha_hoy_str = datetime.now().strftime("%d/%m/%Y")
     
-    # Filtramos los viajes que en la columna Fecha contengan el día de hoy
     viajes_hoy = df_excel[df_excel['Fecha'].astype(str).str.startswith(fecha_hoy_str, na=False)]
     cantidad_hoy = len(viajes_hoy)
     
@@ -181,10 +180,8 @@ try:
     if cantidad_hoy > 0:
         st.sidebar.write("Choferes en ruta hoy:")
         st.sidebar.dataframe(viajes_hoy[['Chofer', 'Destino', 'Estado']])
-except:
-    st.sidebar.write("Aún no hay viajes registrados o el archivo está vacío.")
-
-    # Agregamos un botón para descargar el Excel completo
+        
+    # Agregamos el botón aquí, cuando sabemos que el archivo Excel existe
     st.sidebar.markdown("---")
     with open("Base_Datos_Viajes_Marbar.xlsx", "rb") as archivo_excel:
         st.sidebar.download_button(
@@ -192,3 +189,5 @@ except:
             data=archivo_excel,
             file_name="Base_Datos_Viajes_Marbar_Actualizada.xlsx"
         )
+except:
+    st.sidebar.write("Aún no hay viajes registrados o el archivo está vacío.")
