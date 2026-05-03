@@ -226,7 +226,7 @@ if st.button("CONFIRMAR Y GUARDAR VIAJE"):
             "Chofer": chofer,
             "Sector": sector_elegido,
             "Cargo": cargo_elegido,
-            "Vehiculo": vehiculo_elegido,
+            "Vehiculo": vehiculo,
             "Origen": origen,
             "Destino": destino,
             "Duracion": duracion,
