@@ -65,23 +65,19 @@ if st.session_state["usuario_actual"] == None:
             
         # 2. Si no es el jefe, busca el DNI en la libreta de usuarios
         else:
-            try:
-                df_usuarios = pd.read_excel("Base_Usuarios.xlsx")
-                # El guardia busca si el número ingresado está en la columna "DNI_Usuario"
-                usuario_encontrado = df_usuarios[df_usuarios["DNI_Usuario"].astype(str) == str(usuario_ingresado)]
+            # Le quitamos el paraguas para ver el error real
+            df_usuarios = pd.read_excel("Base_Usuarios.xlsx")
+            usuario_encontrado = df_usuarios[df_usuarios["DNI_Usuario"].astype(str) == str(usuario_ingresado)]
+            
+            if not usuario_encontrado.empty:
+                rol = usuario_encontrado.iloc[0]["Rol"]
+                nombre = usuario_encontrado.iloc[0]["Nombre"]
                 
-                if not usuario_encontrado.empty:
-                    # ¡Lo encontró! Le pone la pulsera con su rol (Chofer o Supervisor)
-                    rol = usuario_encontrado.iloc[0]["Rol"]
-                    nombre = usuario_encontrado.iloc[0]["Nombre"]
-                    
-                    st.session_state["usuario_actual"] = rol
-                    st.session_state["nombre_empleado"] = nombre # Recordamos su nombre para el formulario
-                    st.rerun()
-                else:
-                    st.error("❌ DNI no registrado. Si eres chofer, pídele al administrador que te agregue. (La contraseña déjala en blanco)")
-            except:
-                st.error("❌ Aún no hay usuarios en la base o hubo un error al leerla.")
+                st.session_state["usuario_actual"] = rol
+                st.session_state["nombre_empleado"] = nombre
+                st.rerun()
+            else:
+                st.error("❌ DNI no registrado.")
             
     # EL GUARDIA DE SEGURIDAD: Si no entró, cortamos la página acá.
     st.stop()
