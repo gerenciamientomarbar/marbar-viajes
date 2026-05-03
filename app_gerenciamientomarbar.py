@@ -105,7 +105,14 @@ cargo_elegido = st.selectbox("Selecciona tu Cargo:", lista_cargos)
 nivel_aprobacion_usuario = AUTORIDADES[sector_elegido][cargo_elegido]
 
 st.markdown("### 2. Datos del Viaje")
-chofer = st.text_input("Nombre completo del Chofer:")
+# El formulario revisa quién entró
+if st.session_state["usuario_actual"] == "ADMIN":
+    # Si eres tú, te deja la cajita libre para escribir a mano
+    chofer = st.text_input("Nombre completo del Chofer:")
+else:
+    # Si es un chofer, lee su etiqueta y bloquea la cajita (disabled=True) para que no se equivoque
+    nombre_automatico = st.session_state["nombre_empleado"]
+    chofer = st.text_input("Nombre completo del Chofer:", value=nombre_automatico, disabled=True)
 vehiculos = ["Camioneta Hilux", "Furgón Renault", "Auto Corolla"]
 vehiculo_elegido = st.selectbox("Vehículo:", vehiculos)
 
