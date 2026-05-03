@@ -57,12 +57,31 @@ if st.session_state["usuario_actual"] == None:
     contrasena_ingresada = st.text_input("Contraseña:", type="password") 
     
     if st.button("Entrar al Sistema"):
-        # Por ahora, creamos tu Llave Maestra
+        # 1. El guardia primero revisa si es el Jefe con su llave maestra
         if usuario_ingresado == "ADMIN" and contrasena_ingresada == "Marbar2026":
             st.session_state["usuario_actual"] = "ADMIN"
-            st.rerun() # Esto recarga la página, pero ahora SÍ tiene la pulsera puesta
+            st.session_state["nombre_empleado"] = "Administrador"
+            st.rerun()
+            
+        # 2. Si no es el jefe, busca el DNI en la libreta de usuarios
         else:
-            st.error("❌ Usuario o contraseña incorrectos.")
+            try:
+                df_usuarios = pd.read_excel("Base_Usuarios.xlsx")
+                # El guardia busca si el número ingresado está en la columna "DNI_Usuario"
+                usuario_encontrado = df_usuarios[df_usuarios["DNI_Usuario"].astype(str) == str(usuario_ingresado)]
+                
+                if not usuario_encontrado.empty:
+                    # ¡Lo encontró! Le pone la pulsera con su rol (Chofer o Supervisor)
+                    rol = usuario_encontrado.iloc[0]["Rol"]
+                    nombre = usuario_encontrado.iloc[0]["Nombre"]
+                    
+                    st.session_state["usuario_actual"] = rol
+                    st.session_state["nombre_empleado"] = nombre # Recordamos su nombre para el formulario
+                    st.rerun()
+                else:
+                    st.error("❌ DNI no registrado. Si eres chofer, pídele al administrador que te agregue. (La contraseña déjala en blanco)")
+            except:
+                st.error("❌ Aún no hay usuarios en la base o hubo un error al leerla.")
             
     # EL GUARDIA DE SEGURIDAD: Si no entró, cortamos la página acá.
     st.stop()
