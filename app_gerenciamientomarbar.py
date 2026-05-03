@@ -183,3 +183,12 @@ try:
         st.sidebar.dataframe(viajes_hoy[['Chofer', 'Destino', 'Estado']])
 except:
     st.sidebar.write("Aún no hay viajes registrados o el archivo está vacío.")
+
+    # Agregamos un botón para descargar el Excel completo
+    st.sidebar.markdown("---")
+    with open("Base_Datos_Viajes_Marbar.xlsx", "rb") as archivo_excel:
+        st.sidebar.download_button(
+            label="📥 DESCARGAR BASE DE DATOS (EXCEL)",
+            data=archivo_excel,
+            file_name="Base_Datos_Viajes_Marbar_Actualizada.xlsx"
+        )
