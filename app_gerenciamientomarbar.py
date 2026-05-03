@@ -1,6 +1,21 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import os # Herramienta para revisar si los archivos existen en la computadora
+
+# --- PREPARAR LIBRETAS (BASES DE DATOS) ---
+def preparar_libretas():
+    # Si la libreta de Usuarios no existe, la crea con 3 columnas
+    if not os.path.exists("Base_Usuarios.xlsx"):
+        df_u = pd.DataFrame(columns=["DNI_Usuario", "Nombre", "Rol"])
+        df_u.to_excel("Base_Usuarios.xlsx", index=False)
+    
+    # Si la libreta de Vehículos no existe, la crea con 1 columna
+    if not os.path.exists("Base_Vehiculos.xlsx"):
+        df_v = pd.DataFrame(columns=["Vehiculo"])
+        df_v.to_excel("Base_Vehiculos.xlsx", index=False)
+
+preparar_libretas() # Aquí le damos la orden de ejecutar la revisión
 
 # --- FUNCIONES DE BASE DE DATOS ---
 def obtener_siguiente_id(nombre_archivo):
@@ -217,11 +232,13 @@ try:
         st.sidebar.dataframe(viajes_hoy[['Chofer', 'Destino', 'Estado']])
         
     st.sidebar.markdown("---")
-    with open("Base_Datos_Viajes_Marbar.xlsx", "rb") as archivo_excel:
-        st.sidebar.download_button(
-            label="📥 DESCARGAR BASE DE DATOS (EXCEL)",
-            data=archivo_excel,
-            file_name="Base_Datos_Viajes_Marbar_Actualizada.xlsx"
-        )
+    # Preguntamos si la pulsera VIP dice "ADMIN"
+    if st.session_state["usuario_actual"] == "ADMIN":
+        with open("Base_Datos_Viajes_Marbar.xlsx", "rb") as archivo_excel:
+            st.sidebar.download_button(
+                label="📥 DESCARGAR BASE DE DATOS (EXCEL)",
+                data=archivo_excel,
+                file_name="Base_Datos_Viajes_Marbar_Actualizada.xlsx"
+            )
 except:
     st.sidebar.write("Aún no hay viajes registrados o el archivo está vacío.")
