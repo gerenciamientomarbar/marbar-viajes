@@ -113,8 +113,22 @@ else:
     # Si es un chofer, lee su etiqueta y bloquea la cajita (disabled=True) para que no se equivoque
     nombre_automatico = st.session_state["nombre_empleado"]
     chofer = st.text_input("Nombre completo del Chofer:", value=nombre_automatico, disabled=True)
-vehiculos = ["Camioneta Hilux", "Furgón Renault", "Auto Corolla"]
-vehiculo_elegido = st.selectbox("Vehículo:", vehiculos)
+
+# --- LECTURA AUTOMÁTICA DE VEHÍCULOS ---
+# 1. Le decimos al código que abra la libreta de vehículos
+try:
+    df_vehiculos = pd.read_excel("Base_Vehiculos.xlsx")
+    # Sacamos los nombres de la columna "Vehiculo" y armamos una lista simple
+    lista_vehiculos = df_vehiculos["Vehiculo"].tolist()
+except:
+    lista_vehiculos = [] # Si hay un error, dejamos la lista vacía temporalmente
+
+# 2. Si la libreta está vacía, mostramos un aviso. Si tiene datos, los mostramos.
+if len(lista_vehiculos) == 0:
+    lista_vehiculos = ["⚠️ Pídele al ADMIN que cargue vehículos"]
+
+# 3. Creamos la cajita desplegable usando nuestra lista nueva
+vehiculo = st.selectbox("Vehículo o equipo a utilizar:", lista_vehiculos)
 
 col1, col2 = st.columns(2)
 with col1:
