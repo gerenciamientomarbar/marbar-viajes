@@ -242,3 +242,49 @@ try:
             )
 except:
     st.sidebar.write("Aún no hay viajes registrados o el archivo está vacío.")
+
+# --- 7. OFICINA SECRETA DE ADMINISTRACIÓN ---
+# El cristal mágico: Solo el ADMIN puede ver lo que hay aquí adentro
+if st.session_state["usuario_actual"] == "ADMIN":
+    st.markdown("---")
+    st.title("🛠️ Oficina de Administración")
+    
+    # Creamos dos "pestañas" visuales para que quede ordenado
+    pestaña_usuarios, pestaña_vehiculos = st.tabs(["👥 Agregar Usuarios", "🚘 Agregar Vehículos"])
+    
+    # Lo que pasa en la pestaña de Usuarios
+    with pestaña_usuarios:
+        st.subheader("Registrar Nuevo Usuario")
+        nuevo_dni = st.text_input("DNI o Usuario (ej: 35123456):")
+        nuevo_nombre = st.text_input("Nombre Completo (ej: Juan Perez):")
+        # Aquí repartimos los colores de las pulseras
+        nuevo_rol = st.selectbox("Nivel de Acceso:", ["Chofer", "Supervisor", "Admin"])
+        
+        if st.button("💾 Guardar Usuario"):
+            if nuevo_dni != "" and nuevo_nombre != "":
+                # 1. Abrimos la libreta
+                df_u = pd.read_excel("Base_Usuarios.xlsx")
+                # 2. Escribimos al final de la libreta
+                df_u.loc[len(df_u)] = [nuevo_dni, nuevo_nombre, nuevo_rol]
+                # 3. Guardamos la libreta
+                df_u.to_excel("Base_Usuarios.xlsx", index=False)
+                st.success(f"¡Listo! {nuevo_nombre} ya tiene permiso para entrar como {nuevo_rol}.")
+            else:
+                st.error("Por favor, completa el DNI y el Nombre.")
+                
+    # Lo que pasa en la pestaña de Vehículos
+    with pestaña_vehiculos:
+        st.subheader("Registrar Nuevo Vehículo")
+        nuevo_vehiculo = st.text_input("Nombre o Patente del Vehículo (ej: Camioneta F-201):")
+        
+        if st.button("💾 Guardar Vehículo"):
+            if nuevo_vehiculo != "":
+                # 1. Abrimos la libreta
+                df_v = pd.read_excel("Base_Vehiculos.xlsx")
+                # 2. Escribimos al final
+                df_v.loc[len(df_v)] = [nuevo_vehiculo]
+                # 3. Guardamos la libreta
+                df_v.to_excel("Base_Vehiculos.xlsx", index=False)
+                st.success(f"¡Listo! El vehículo {nuevo_vehiculo} fue agregado a la flota.")
+            else:
+                st.error("Por favor, escribe el nombre del vehículo.")
