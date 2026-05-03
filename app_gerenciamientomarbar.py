@@ -27,6 +27,32 @@ def guardar_en_excel(datos_viaje):
         st.error(f"Error al guardar: {e}")
         return False
 
+
+# --- SISTEMA DE INGRESO (LOGIN) ---
+# 1. Repartimos la "Pulsera VIP" si es la primera vez que entra en la página
+if "usuario_actual" not in st.session_state:
+    st.session_state["usuario_actual"] = None
+
+# 2. Si no tiene la pulsera puesta (es None), le mostramos solo la puerta de entrada
+if st.session_state["usuario_actual"] == None:
+    st.title("🔒 Ingreso Privado - MARBAR")
+    
+    usuario_ingresado = st.text_input("Usuario o DNI:")
+    # type="password" hace que lo que escribas se vea como puntitos negros
+    contrasena_ingresada = st.text_input("Contraseña:", type="password") 
+    
+    if st.button("Entrar al Sistema"):
+        # Por ahora, creamos tu Llave Maestra
+        if usuario_ingresado == "ADMIN" and contrasena_ingresada == "Marbar2026":
+            st.session_state["usuario_actual"] = "ADMIN"
+            st.rerun() # Esto recarga la página, pero ahora SÍ tiene la pulsera puesta
+        else:
+            st.error("❌ Usuario o contraseña incorrectos.")
+            
+    # EL GUARDIA DE SEGURIDAD: Si no entró, cortamos la página acá.
+    st.stop()
+
+
 # --- INTERFAZ VISUAL ---
 st.title("Gestión de Viajes - MARBAR")
 st.subheader("Formulario de Despacho Seguro")
