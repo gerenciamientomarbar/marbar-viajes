@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
+# --- FUNCIONES DE BASE DE DATOS ---
 def obtener_siguiente_id(nombre_archivo):
     try:
         df_existente = pd.read_excel(nombre_archivo)
-        if df_existente.empty:
+        if df_existente.empty: 
             return 1
         return int(df_existente['ID'].max() + 1)
     except:
@@ -14,179 +15,171 @@ def obtener_siguiente_id(nombre_archivo):
 def guardar_en_excel(datos_viaje):
     nombre_db = "Base_Datos_Viajes_Marbar.xlsx"
     try:
-        # Intentamos leer el archivo para ver si existe
         df_nuevo = pd.DataFrame([datos_viaje])
         try:
             with pd.ExcelWriter(nombre_db, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
-                # Si el archivo existe, agregamos la fila al final
                 df_existente = pd.read_excel(nombre_db)
                 df_nuevo.to_excel(writer, startrow=len(df_existente)+1, header=False, index=False)
         except FileNotFoundError:
-            # Si el archivo no existe, lo creamos de cero
             df_nuevo.to_excel(nombre_db, index=False)
         return True
     except Exception as e:
         st.error(f"Error al guardar: {e}")
         return False
 
-# 1. Título de la aplicación (Lo que se verá arriba de todo en el celular)
+# --- INTERFAZ VISUAL ---
 st.title("Gestión de Viajes - MARBAR")
 st.subheader("Formulario de Despacho Seguro")
 
-# 2. La Agenda de MARBAR (Copiamos la que ya teníamos)
+# 1. LA AGENDA COMPLETA DE MARBAR
 AUTORIDADES = {
-    "Operaciones": {"Jefe": "Ivan Perez", "Nivel": 2},
-    "Mantenimiento": {"Jefe": "Fabiana Retamozo", "Nivel": 2},
-    "Seguridad (SSA)": {"Jefe": "Paula Inda", "Nivel": 3},
-    "Logística": {"Jefe": "Gerencia Operativa", "Nivel": 3}
+    "Higiene y Seguridad": {"Coordinador SSA": 1, "Jefe SSA": 2},
+    "Logistica": {"Chofer": 0, "Coordinador de Logistica": 1, "Jefe de Logistica": 2},
+    "Fluidos": {"Supervisor de SFP": 1, "Jefe de SFP": 2},
+    "Control de solidos": {"Supervisor de CDS": 1, "Jefe de CDS": 2},
+    "Mantenimiento": {"Mecanico / Electrico / Soldador": 1, "Jefe de Mantenimiento": 2},
+    "Gerencia": {"Jefe de Operaciones / Gerente General": 3}
 }
 
-# 3. Creamos el primer selector en la web
-lista_sectores = list(AUTORIDADES.keys())
-sector_elegido = st.selectbox("Selecciona tu Sector:", lista_sectores)
+st.markdown("### 1. Datos del Solicitante")
+# El selector de cargo ahora depende del sector que elijas
+sector_elegido = st.selectbox("Selecciona tu Sector:", list(AUTORIDADES.keys()))
+lista_cargos = list(AUTORIDADES[sector_elegido].keys())
+cargo_elegido = st.selectbox("Selecciona tu Cargo:", lista_cargos)
+nivel_aprobacion_usuario = AUTORIDADES[sector_elegido][cargo_elegido]
 
-# 4. Mostramos quién es el jefe según el sector (solo para informar)
-jefe = AUTORIDADES[sector_elegido]["Jefe"]
-st.info(f"Autoridad de despacho para este sector: {jefe}")
+st.markdown("### 2. Datos del Viaje")
+chofer = st.text_input("Nombre completo del Chofer:")
+vehiculos = ["Camioneta Hilux", "Furgón Renault", "Auto Corolla"]
+vehiculo_elegido = st.selectbox("Vehículo:", vehiculos)
 
-# 5. Entrada de datos del Chofer (Caja de texto)
-nombre_chofer = st.text_input("Nombre completo del Chofer:")
-
-# 6. Datos del Vehículo
-# Primero definimos la lista de camionetas como hacíamos antes
-unidades = ["C-101", "C-102", "C-103", "F-201", "F-202", "Particular"]
-unidad_elegida = st.selectbox("Selecciona la Unidad / Vehículo:", unidades)
-
-# 7. Datos del Trayecto
-col1, col2 = st.columns(2) # Esto divide la pantalla en dos columnas, queda muy bien en el celular
+col1, col2 = st.columns(2)
 with col1:
     origen = st.text_input("Origen:")
 with col2:
     destino = st.text_input("Destino:")
 
-    # 8. Evaluación de Riesgos
-st.markdown("---") # Esto dibuja una línea horizontal para separar secciones
-st.subheader("⚠️ Evaluación de Seguridad")
+duracion = st.text_input("Duración estimada (ej: 2 horas):")
+tipo_salida = st.radio("Tipo de Salida:", ["Planificada", "Urgencia"])
 
-# Creamos interruptores (toggle switches) que son fáciles de usar en el celular
-descanso = st.toggle("¿Cumplió con las 12hs de descanso?")
-clima_ok = st.toggle("¿El clima es apto para transitar?")
-documentacion = st.toggle("¿Tiene licencia y papeles del vehículo al día?")
-
-# 9. Preguntas con opciones (Radio buttons)
-st.markdown("---")
-
-# Pregunta de Fatiga
-fatiga = st.radio(
-    "Estado de Fatiga:",
-    ["Bien (Descansado)", "Fatiga Leve (Cansancio normal)", "Fatiga Moderada / Alta"],
-    index=0 # Esto hace que la primera opción esté marcada por defecto
-)
-
-# Pregunta de Comunicación
-comunicacion = st.radio(
-    "Nivel de Comunicación en la ruta:",
-    ["Comunicación total", "Tramos sin señal", "Sin señal en todo el trayecto"],
-    index=0
-)
-
-# 10. CALCULADORA INVISIBLE DE RIESGO
-# Transformamos los "Sí/No" y las opciones en puntos, igual que antes
-
+st.markdown("### 3. Evaluación de Riesgos")
 puntaje = 0
 
-# Sumamos por los interruptores (Si está activo, suma 0. Si está apagado, suma puntos de riesgo)
-if not descanso: puntaje += 10
-if not clima_ok: puntaje += 10
-if not documentacion: puntaje += 5
+# A. Distancia
+distancia = st.radio("A. Distancia del viaje:", ["< 50km", "< 100km", "< 200km", "> 200km"])
+if distancia == "< 50km": puntaje += 1
+elif distancia == "< 100km": puntaje += 2
+elif distancia == "< 200km": puntaje += 5
+else: puntaje += 7
 
-# Sumamos por la Fatiga
-if fatiga == "Fatiga Leve (Cansancio normal)":
-    puntaje += 5
-elif fatiga == "Fatiga Moderada / Alta":
-    puntaje += 15
+# B. Clima
+clima = st.selectbox("B. Clima:", ["Despejado", "Nublado", "Viento", "Lluvia", "Niebla", "Nieve"])
+puntos_clima = {"Despejado": 0, "Nublado": 1, "Viento": 2, "Lluvia": 4, "Niebla": 8, "Nieve": 9}
+puntaje += puntos_clima[clima]
 
-# Sumamos por la Comunicación
-if comunicacion == "Tramos sin señal":
-    puntaje += 5
-elif comunicacion == "Sin señal en todo el trayecto":
-    puntaje += 10
+# C. Pasajeros
+pasajeros = st.radio("C. Vehículos y Pasajeros:", ["Con pasajeros", "Solo conductor"])
+puntaje += 1 if pasajeros == "Con pasajeros" else 5
 
-# 11. DETERMINAR EL NIVEL (Lógica de Marbar)
-if puntaje <= 10:
-    nivel_viaje = 1
-    estado_viaje = "VIAJE AUTORIZADO"
-    color_alerta = "green"
-elif puntaje <= 20:
-    nivel_viaje = 2
-    estado_viaje = "REQUIERE AUTORIZACIÓN (Jefe de Sector)"
-    color_alerta = "orange"
+# D. Camino
+camino = st.radio("D. Condiciones del camino:", ["Pavimento", "Mixto", "Tierra"])
+puntos_camino = {"Pavimento": 1, "Mixto": 2, "Tierra": 4}
+puntaje += puntos_camino[camino]
+
+# E. Horas de Trabajo
+dormio = st.radio("E1. ¿El conductor durmió más de 8hs consecutivas?", ["Sí", "No"])
+horas_totales = st.radio("E2. Suma las HS TRABAJANDO + HS PLANEADAS DE VIAJE:", ["< 12hs", "< 14hs", "< 16hs"])
+if dormio == "Sí":
+    puntos_h = {"< 12hs": 1, "< 14hs": 3, "< 16hs": 6}
 else:
-    nivel_viaje = 3
-    estado_viaje = "ALERTA: REQUIERE AUTORIZACIÓN GERENCIAL"
-    color_alerta = "red"
+    puntos_h = {"< 12hs": 2, "< 14hs": 5, "< 16hs": 8}
+puntaje += puntos_h[horas_totales]
 
-    # 12. MOSTRAR RESULTADOS EN PANTALLA
+# F. Escolta
+escolta = st.radio("F. ¿Necesita escolta?", ["No", "Sí"])
+puntaje += 1 if escolta == "No" else 5
+
+# G. Horario
+horario = st.radio("G. Condición de viaje:", ["Diurno", "Nocturno"])
+if horario == "Nocturno":
+    alarma_nocturna = "encendida"
+    puntaje += 5
+else:
+    alarma_nocturna = "apagada"
+    puntaje += 1
+
+# H. Comunicación
+comunicacion = st.radio("H. Comunicación:", ["Comunicación total", "Tramos sin señal", "Sin señal"])
+puntos_com = {"Comunicación total": 1, "Tramos sin señal": 3, "Sin señal": 5}
+puntaje += puntos_com[comunicacion]
+
+# --- 4. CÁLCULO DE NIVEL Y APROBACIÓN ---
+if puntaje <= 15: nivel_viaje = 1
+elif puntaje <= 30: nivel_viaje = 2
+else: nivel_viaje = 3
+
+if nivel_aprobacion_usuario >= nivel_viaje:
+    estado_viaje = f"AUTORIZADO (Auto-aprobado por {cargo_elegido})"
+    color_alerta = "green"
+else:
+    estado_viaje = "PENDIENTE DE APROBACIÓN (Jefe de Sector / Gerencia)"
+    color_alerta = "orange" if nivel_viaje == 2 else "red"
+
 st.markdown("---")
 st.subheader("📋 Resultado del Gerenciamiento")
 
-# Mostramos el puntaje y el estado con el color que corresponda
 if color_alerta == "green":
-    st.success(f"**{estado_viaje}** (Puntaje: {puntaje})")
+    st.success(f"**{estado_viaje}** | Nivel de Riesgo: {nivel_viaje} | Puntaje: {puntaje}")
 elif color_alerta == "orange":
-    st.warning(f"**{estado_viaje}** (Puntaje: {puntaje})")
+    st.warning(f"**{estado_viaje}** | Nivel de Riesgo: {nivel_viaje} | Puntaje: {puntaje}")
 else:
-    st.error(f"**{estado_viaje}** (Puntaje: {puntaje})")
+    st.error(f"**{estado_viaje}** | Nivel de Riesgo: {nivel_viaje} | Puntaje: {puntaje}")
 
-# 13. BOTÓN FINAL PARA REGISTRAR
-# 13. BOTÓN FINAL PARA REGISTRAR (Versión Completa)
+# --- 5. GUARDADO DE DATOS ---
 if st.button("CONFIRMAR Y GUARDAR VIAJE"):
-    if nombre_chofer == "":
-        st.error("Por favor, ingresa el nombre del chofer antes de guardar.")
+    if chofer == "" or origen == "" or destino == "":
+        st.error("Por favor, completa el Nombre del Chofer, Origen y Destino antes de guardar.")
     else:
-        # Preparamos la "ficha" con todos los datos para el Excel
         nuevo_id = obtener_siguiente_id("Base_Datos_Viajes_Marbar.xlsx")
+        ahora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         
         datos_para_guardar = {
             "ID": nuevo_id,
-            "Fecha": datetime.now().strftime("%d/%m/%Y"),
-            "Hora": datetime.now().strftime("%H:%M"),
-            "Chofer": nombre_chofer,
-            "Unidad": unidad_elegida,
+            "Fecha": ahora,
+            "Chofer": chofer,
+            "Sector": sector_elegido,
+            "Cargo": cargo_elegido,
+            "Vehiculo": vehiculo_elegido,
             "Origen": origen,
             "Destino": destino,
+            "Duracion": duracion,
+            "Salida": tipo_salida,
             "Puntaje": puntaje,
             "Nivel": nivel_viaje,
-            "Estado": estado_viaje,
-            "Autoridad": jefe
+            "Alarma Nocturna": alarma_nocturna,
+            "Estado": estado_viaje
         }
         
-        # Intentamos guardar
         exito = guardar_en_excel(datos_para_guardar)
-        
         if exito:
             st.balloons()
             st.success(f"¡Éxito! Viaje ID {nuevo_id} registrado en el sistema de Marbar.")
-            st.info("Ya puedes cerrar esta pestaña o cargar un nuevo viaje.")
 
-            # 14. PANEL DE ESTADÍSTICAS (Resumen de Gestión)
-st.sidebar.markdown("---") # Esto crea una barra lateral a la izquierda
-st.sidebar.header("📊 Resumen de hoy")
-
+# --- 6. PANEL LATERAL (RESUMEN) ---
+st.sidebar.markdown("---")
+st.sidebar.header("📊 Resumen de Gestión")
 try:
     df_excel = pd.read_excel("Base_Datos_Viajes_Marbar.xlsx")
-    fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+    fecha_hoy_str = datetime.now().strftime("%d/%m/%Y")
     
-    # Filtramos los viajes que tengan la fecha de hoy
-    viajes_hoy = df_excel[df_excel['Fecha'] == fecha_hoy]
+    # Filtramos los viajes que en la columna Fecha contengan el día de hoy
+    viajes_hoy = df_excel[df_excel['Fecha'].astype(str).str.startswith(fecha_hoy_str, na=False)]
     cantidad_hoy = len(viajes_hoy)
     
-    # Mostramos el número grande en la barra lateral
-    st.sidebar.metric("Viajes registrados hoy", cantidad_hoy)
+    st.sidebar.metric("Viajes registrados HOY", cantidad_hoy)
     
-    # Si hay viajes, mostramos los nombres de los choferes que salieron
     if cantidad_hoy > 0:
-        st.sidebar.write("Choferes en ruta:")
+        st.sidebar.write("Choferes en ruta hoy:")
         st.sidebar.dataframe(viajes_hoy[['Chofer', 'Destino', 'Estado']])
 except:
-    st.sidebar.write("Aún no hay viajes registrados.")
+    st.sidebar.write("Aún no hay viajes registrados o el archivo está vacío.")
