@@ -137,35 +137,35 @@ with col2:
     destino = st.text_input("Destino:")
 
 duracion = st.text_input("Duración estimada (ej: 2 horas):")
-tipo_salida = st.radio("Tipo de Salida:", ["Planificada", "Urgencia"]), index=None
+tipo_salida = st.radio("Tipo de Salida:", ["Planificada", "Urgencia"], index=None)
 
 st.markdown("### 3. Evaluación de Riesgos")
 puntaje = 0
 
 # A. Distancia
-distancia = st.radio("A. Distancia del viaje:", ["< 50km", "< 100km", "< 200km", "> 200km"]), index=None
+distancia = st.radio("A. Distancia del viaje:", ["< 50km", "< 100km", "< 200km", "> 200km"], index=None)
 if distancia == "< 50km": puntaje += 1
 elif distancia == "< 100km": puntaje += 2
 elif distancia == "< 200km": puntaje += 5
 else: puntaje += 7
 
 # B. Clima
-clima = st.selectbox("B. Clima:", ["Despejado", "Nublado", "Viento", "Lluvia", "Niebla", "Nieve"]), index=None
+clima = st.selectbox("B. Clima:", ["Despejado", "Nublado", "Viento", "Lluvia", "Niebla", "Nieve"], index=None)
 puntos_clima = {"Despejado": 0, "Nublado": 1, "Viento": 2, "Lluvia": 4, "Niebla": 8, "Nieve": 9}
 puntaje += puntos_clima[clima]
 
 # C. Pasajeros
-pasajeros = st.radio("C. Vehículos y Pasajeros:", ["Con pasajeros", "Solo conductor"]), index=None
+pasajeros = st.radio("C. Vehículos y Pasajeros:", ["Con pasajeros", "Solo conductor"], index=None)
 puntaje += 1 if pasajeros == "Con pasajeros" else 5
 
 # D. Camino
-camino = st.radio("D. Condiciones del camino:", ["Pavimento", "Mixto", "Tierra"]), index=None
+camino = st.radio("D. Condiciones del camino:", ["Pavimento", "Mixto", "Tierra"], index=None)
 puntos_camino = {"Pavimento": 1, "Mixto": 2, "Tierra": 4}
 puntaje += puntos_camino[camino]
 
 # E. Horas de Trabajo
-dormio = st.radio("E1. ¿El conductor durmió más de 8hs consecutivas?", ["Sí", "No"]), index=None
-horas_totales = st.radio("E2. Suma las HS TRABAJANDO + HS PLANEADAS DE VIAJE:", ["< 12hs", "< 14hs", "< 16hs"]), index=None
+dormio = st.radio("E1. ¿El conductor durmió más de 8hs consecutivas?", ["Sí", "No"], index=None)
+horas_totales = st.radio("E2. Suma las HS TRABAJANDO + HS PLANEADAS DE VIAJE:", ["< 12hs", "< 14hs", "< 16hs"], index=None)
 if dormio == "Sí":
     puntos_h = {"< 12hs": 1, "< 14hs": 3, "< 16hs": 6}
 else:
@@ -173,11 +173,11 @@ else:
 puntaje += puntos_h[horas_totales]
 
 # F. Escolta
-escolta = st.radio("F. ¿Necesita escolta?", ["No", "Sí"]), index=None
+escolta = st.radio("F. ¿Necesita escolta?", ["No", "Sí"], index=None)
 puntaje += 1 if escolta == "No" else 5
 
 # G. Horario
-horario = st.radio("G. Condición de viaje:", ["Diurno", "Nocturno"]), index=None
+horario = st.radio("G. Condición de viaje:", ["Diurno", "Nocturno"], index=None)
 if horario == "Nocturno":
     alarma_nocturna = "encendida"
     puntaje += 5
@@ -186,7 +186,7 @@ else:
     puntaje += 1
 
 # H. Comunicación
-comunicacion = st.radio("H. Comunicación:", ["Comunicación total", "Tramos sin señal", "Sin señal"]), index=None
+comunicacion = st.radio("H. Comunicación:", ["Comunicación total", "Tramos sin señal", "Sin señal"], index=None)
 puntos_com = {"Comunicación total": 1, "Tramos sin señal": 3, "Sin señal": 5}
 puntaje += puntos_com[comunicacion]
 
