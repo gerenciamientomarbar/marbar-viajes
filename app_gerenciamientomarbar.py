@@ -291,6 +291,35 @@ try:
 except:
     st.sidebar.write("Aún no hay viajes registrados o el archivo está vacío.")
 
+# --- BANDEJA DE APROBACIONES (Solo para Jefes) ---
+# Solo dejamos pasar al ADMIN o al Supervisor
+if st.session_state["usuario_actual"] == "ADMIN" or st.session_state["usuario_actual"] == "Supervisor":
+    st.markdown("---")
+    st.title("📥 Bandeja de Aprobaciones")
+    
+    try:
+        # 1. El jefe abre la libreta de todos los viajes
+        df_viajes = pd.read_excel("Base_Datos_Viajes_Marbar.xlsx")
+        
+        # 2. Truco de seguridad: Revisamos si alguien ya le pegó la calcomanía alguna vez
+        if "Aprobacion" in df_viajes.columns:
+            # Filtramos para ver SOLO los que dicen "🔴 Pendiente"
+            viajes_pendientes = df_viajes[df_viajes["Aprobacion"] == "🔴 Pendiente"]
+        else:
+            viajes_pendientes = pd.DataFrame() # Si no existe, dejamos la bandeja vacía
+            
+        # 3. Le mostramos los resultados al jefe
+        if viajes_pendientes.empty:
+            st.info("✅ Todo al día. No hay viajes pendientes de aprobación.")
+        else:
+            st.warning(f"⚠️ Tienes {len(viajes_pendientes)} viaje(s) esperando aprobación.")
+            # Le mostramos una tablita resumida para que lea rápido
+            st.dataframe(viajes_pendientes[["ID", "Chofer", "Vehiculo", "Destino", "Fecha"]])
+            
+    except:
+        st.info("La base de viajes aún está vacía.")
+
+
 # --- 7. OFICINA SECRETA DE ADMINISTRACIÓN ---
 # El cristal mágico: Solo el ADMIN puede ver lo que hay aquí adentro
 if st.session_state["usuario_actual"] == "ADMIN":
