@@ -216,46 +216,46 @@ else:
 if st.button("CONFIRMAR Y GUARDAR VIAJE"):
         # --- EL CANDADO DE SEGURIDAD ---
         # Revisamos que NINGUNA variable esté vacía o en None
-        if chofer == "" or origen == "" or destino == "" or tipo_salida == None or distancia == None or clima == None or pasajeros == None or camino == None or dormio == None or horas_totales == None or escolta == None or horario == None or comunicacion == None:
+    if chofer == "" or origen == "" or destino == "" or tipo_salida == None or distancia == None or clima == None or pasajeros == None or camino == None or dormio == None or horas_totales == None or escolta == None or horario == None or comunicacion == None:
             st.error("⛔ ALTO: Por favor, responde TODAS las preguntas y completa todos los campos de texto antes de guardar el viaje.")
-        else:
+    else:
             # (AQUÍ DEBAJO QUEDA TODO EL RESTO DE TU CÓDIGO QUE YA ESTABA: nuevo_id = ..., etc.)
-            nuevo_id = obtener_siguiente_id("Base_Datos_Viajes_Marbar.xlsx")
+        nuevo_id = obtener_siguiente_id("Base_Datos_Viajes_Marbar.xlsx")
         ahora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         
         datos_para_guardar = {
-            "ID": nuevo_id,
-            "Fecha": ahora,
-            "Chofer": chofer,
-            "Sector": sector_elegido,
-            "Cargo": cargo_elegido,
-            "Vehiculo": vehiculo,
-            "Origen": origen,
-            "Destino": destino,
-            "Duracion": duracion,
-            "Salida": tipo_salida,
-            "Puntaje": puntaje,
-            "Nivel": nivel_viaje,
-            "Alarma Nocturna": alarma_nocturna,
-            "Estado": estado_viaje,
-            "Aprobacion": "🔴 Pendiente" # <--- NUEVA CALCOMANÍA ROJA
-        }
-        
+                "ID": nuevo_id,
+                "Fecha": ahora,
+                "Chofer": chofer,
+                "Sector": sector_elegido,
+                "Cargo": cargo_elegido,
+                "Vehiculo": vehiculo,
+                "Origen": origen,
+                "Destino": destino,
+                "Duracion": duracion,
+                "Salida": tipo_salida,
+                "Puntaje": puntaje,
+                "Nivel": nivel_viaje,
+                "Alarma Nocturna": alarma_nocturna,
+                "Estado": estado_viaje,
+                "Aprobacion": "🔴 Pendiente" # <--- NUEVA CALCOMANÍA ROJA
+            }
+            
         exito = guardar_en_excel(datos_para_guardar)
         if exito:
-            st.balloons()
-            st.success(f"¡Éxito! Viaje ID {nuevo_id} registrado en el sistema de Marbar.")
-            
-            # --- EL TIMBRE DE WHATSAPP ---
-            # 1. Escribimos la carta que va a mandar el chofer
-            mensaje = f"Hola! Acabo de cargar el viaje ID {nuevo_id} con destino a {destino}. Por favor apruébalo cuando puedas."
-            # 2. Reemplazamos los espacios por %20 (internet no entiende los espacios en blanco en los links)
-            mensaje_internet = mensaje.replace(" ", "%20")
-            # 3. Armamos el link mágico de WhatsApp
-            link_whatsapp = f"https://wa.me/?text={mensaje_internet}"
-            
-            # 4. Mostramos el botón gigante en la pantalla
-            st.markdown(f"### [📲 TOCA AQUÍ PARA AVISAR AL JEFE POR WHATSAPP]({link_whatsapp})")
+                st.balloons()
+                st.success(f"¡Éxito! Viaje ID {nuevo_id} registrado en el sistema de Marbar.")
+                
+                # --- EL TIMBRE DE WHATSAPP ---
+                # 1. Escribimos la carta que va a mandar el chofer
+                mensaje = f"Hola! Acabo de cargar el viaje ID {nuevo_id} con destino a {destino}. Por favor apruébalo cuando puedas."
+                # 2. Reemplazamos los espacios por %20 (internet no entiende los espacios en blanco en los links)
+                mensaje_internet = mensaje.replace(" ", "%20")
+                # 3. Armamos el link mágico de WhatsApp
+                link_whatsapp = f"https://wa.me/?text={mensaje_internet}"
+                
+                # 4. Mostramos el botón gigante en la pantalla
+                st.markdown(f"### [📲 TOCA AQUÍ PARA AVISAR AL JEFE POR WHATSAPP]({link_whatsapp})")
 
 # --- 6. PANEL LATERAL (RESUMEN Y DESCARGA) ---
 st.sidebar.markdown("---")
