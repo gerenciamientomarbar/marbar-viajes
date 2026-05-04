@@ -234,13 +234,25 @@ if st.button("CONFIRMAR Y GUARDAR VIAJE"):
             "Puntaje": puntaje,
             "Nivel": nivel_viaje,
             "Alarma Nocturna": alarma_nocturna,
-            "Estado": estado_viaje
+            "Estado": estado_viaje,
+            "Aprobacion": "🔴 Pendiente" # <--- NUEVA CALCOMANÍA ROJA
         }
         
         exito = guardar_en_excel(datos_para_guardar)
         if exito:
             st.balloons()
             st.success(f"¡Éxito! Viaje ID {nuevo_id} registrado en el sistema de Marbar.")
+            
+            # --- EL TIMBRE DE WHATSAPP ---
+            # 1. Escribimos la carta que va a mandar el chofer
+            mensaje = f"Hola! Acabo de cargar el viaje ID {nuevo_id} con destino a {destino}. Por favor apruébalo cuando puedas."
+            # 2. Reemplazamos los espacios por %20 (internet no entiende los espacios en blanco en los links)
+            mensaje_internet = mensaje.replace(" ", "%20")
+            # 3. Armamos el link mágico de WhatsApp
+            link_whatsapp = f"https://wa.me/?text={mensaje_internet}"
+            
+            # 4. Mostramos el botón gigante en la pantalla
+            st.markdown(f"### [📲 TOCA AQUÍ PARA AVISAR AL JEFE POR WHATSAPP]({link_whatsapp})")
 
 # --- 6. PANEL LATERAL (RESUMEN Y DESCARGA) ---
 st.sidebar.markdown("---")
