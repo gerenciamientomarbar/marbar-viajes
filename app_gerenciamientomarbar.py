@@ -152,7 +152,7 @@ else: puntaje += 7
 # B. Clima
 clima = st.selectbox("B. Clima:", ["Despejado", "Nublado", "Viento", "Lluvia", "Niebla", "Nieve"], index=None)
 puntos_clima = {"Despejado": 0, "Nublado": 1, "Viento": 2, "Lluvia": 4, "Niebla": 8, "Nieve": 9}
-puntaje += puntos_clima[clima]
+puntaje += puntos_clima.get(clima, 0)
 
 # C. Pasajeros
 pasajeros = st.radio("C. Vehículos y Pasajeros:", ["Con pasajeros", "Solo conductor"], index=None)
