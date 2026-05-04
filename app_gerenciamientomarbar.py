@@ -161,7 +161,7 @@ puntaje += 1 if pasajeros == "Con pasajeros" else 5
 # D. Camino
 camino = st.radio("D. Condiciones del camino:", ["Pavimento", "Mixto", "Tierra"], index=None)
 puntos_camino = {"Pavimento": 1, "Mixto": 2, "Tierra": 4}
-puntaje += puntos_camino.get[camino, 0]
+puntaje += puntos_camino.get(camino, 0)
 
 # E. Horas de Trabajo
 dormio = st.radio("E1. ¿El conductor durmió más de 8hs consecutivas?", ["Sí", "No"], index=None)
@@ -170,7 +170,7 @@ if dormio == "Sí":
     puntos_h = {"< 12hs": 1, "< 14hs": 3, "< 16hs": 6}
 else:
     puntos_h = {"< 12hs": 2, "< 14hs": 5, "< 16hs": 8}
-puntaje += puntos_h.get[horas_totales, 0]
+puntaje += puntos_h.get(horas_totales, 0)
 
 # F. Escolta
 escolta = st.radio("F. ¿Necesita escolta?", ["No", "Sí"], index=None)
@@ -188,7 +188,7 @@ else:
 # H. Comunicación
 comunicacion = st.radio("H. Comunicación:", ["Comunicación total", "Tramos sin señal", "Sin señal"], index=None)
 puntos_com = {"Comunicación total": 1, "Tramos sin señal": 3, "Sin señal": 5}
-puntaje += puntos_com.get[comunicacion, 0]
+puntaje += puntos_com.get(comunicacion, 0)
 
 # --- 4. CÁLCULO DE NIVEL Y APROBACIÓN ---
 if puntaje <= 15: nivel_viaje = 1
