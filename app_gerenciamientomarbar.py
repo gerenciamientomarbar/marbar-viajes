@@ -214,10 +214,13 @@ else:
 
 # --- 5. GUARDADO DE DATOS ---
 if st.button("CONFIRMAR Y GUARDAR VIAJE"):
-    if chofer == "" or origen == "" or destino == "":
-        st.error("Por favor, completa el Nombre del Chofer, Origen y Destino antes de guardar.")
-    else:
-        nuevo_id = obtener_siguiente_id("Base_Datos_Viajes_Marbar.xlsx")
+        # --- EL CANDADO DE SEGURIDAD ---
+        # Revisamos que NINGUNA variable esté vacía o en None
+        if chofer == "" or origen == "" or destino == "" or tipo_salida == None or distancia == None or clima == None or pasajeros == None or camino == None or dormio == None or horas_totales == None or escolta == None or horario == None or comunicacion == None:
+            st.error("⛔ ALTO: Por favor, responde TODAS las preguntas y completa todos los campos de texto antes de guardar el viaje.")
+        else:
+            # (AQUÍ DEBAJO QUEDA TODO EL RESTO DE TU CÓDIGO QUE YA ESTABA: nuevo_id = ..., etc.)
+            nuevo_id = obtener_siguiente_id("Base_Datos_Viajes_Marbar.xlsx")
         ahora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         
         datos_para_guardar = {
