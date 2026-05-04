@@ -291,6 +291,10 @@ try:
                 data=archivo_excel,
                 file_name="Base_Datos_Viajes_Marbar_Actualizada.xlsx"
             )
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("**Últimos viajes registrados:**")
+    # Le decimos que dibuje una tablita con los últimos 5 viajes de la libreta
+            st.sidebar.dataframe(df_excel[["ID", "Chofer", "Destino", "Estado", "Nivel"]].tail(5), hide_index=True)
 except:
     st.sidebar.write("Aún no hay viajes registrados o el archivo está vacío.")
 
