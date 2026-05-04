@@ -291,10 +291,6 @@ try:
                 data=archivo_excel,
                 file_name="Base_Datos_Viajes_Marbar_Actualizada.xlsx"
             )
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("**Últimos viajes registrados:**")
-    # Le decimos que dibuje una tablita con los últimos 5 viajes de la libreta
-            st.sidebar.dataframe(df_excel[["ID", "Chofer", "Destino", "Estado", "Nivel"]].tail(5), hide_index=True)
 except:
     st.sidebar.write("Aún no hay viajes registrados o el archivo está vacío.")
 
@@ -372,3 +368,28 @@ if st.session_state["usuario_actual"] == "ADMIN":
                 st.success(f"¡Listo! El vehículo {nuevo_vehiculo} fue agregado a la flota.")
             else:
                 st.error("Por favor, escribe el nombre del vehículo.")
+
+
+# --- TABLERO PÚBLICO DE VIAJES (Para Choferes y Jefes) ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🚦 Estado de Viajes (HOY)")
+
+try:
+    # 1. Abrimos la libreta para que la lea la pantalla pública
+    df_tablero = pd.read_excel("Base_Datos_Viajes_Marbar.xlsx")
+    
+    # 2. Le preguntamos a la computadora qué día es hoy
+    hoy_texto = datetime.now().strftime("%d/%m/%Y")
+    
+    # 3. Filtramos la libreta para dejar SOLO los viajes que tengan la fecha de hoy
+    viajes_de_hoy = df_tablero[df_tablero["Fecha"].str.contains(hoy_texto, na=False)]
+    
+    # 4. Mostramos el resultado en el pasillo (Panel lateral)
+    if viajes_de_hoy.empty:
+        st.sidebar.info("Aún no hay viajes registrados en el día de hoy.")
+    else:
+        # Mostramos solo las columnas clave para el chofer
+        st.sidebar.dataframe(viajes_de_hoy[["ID", "Chofer", "Destino", "Aprobacion"]], hide_index=True)
+
+except:
+    st.sidebar.info("La base de datos aún no tiene viajes.")
