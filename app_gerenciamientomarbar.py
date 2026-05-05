@@ -7,7 +7,8 @@ import os # Herramienta para revisar si los archivos existen en la computadora
 def preparar_libretas():
     # Si la libreta de Usuarios no existe, la crea con 3 columnas
     if not os.path.exists("Base_Usuarios.xlsx"):
-        df_u = pd.DataFrame(columns=["DNI_Usuario", "Nombre", "Rol"])
+        # Agregamos la columna 'Sector' a la lista
+        df_u = pd.DataFrame(columns=["DNI_Usuario", "Nombre", "Rol", "Sector"]) 
         df_u.to_excel("Base_Usuarios.xlsx", index=False)
     
     # Si la libreta de Vehículos no existe, la crea con 1 columna
@@ -74,12 +75,14 @@ if st.session_state["usuario_actual"] == None:
             usuario_encontrado = df_usuarios[df_usuarios["DNI_Usuario"].astype(str) == str(usuario_ingresado)]
             
             if not usuario_encontrado.empty:
-                rol = usuario_encontrado.iloc[0]["Rol"]
-                nombre = usuario_encontrado.iloc[0]["Nombre"]
-                
-                st.session_state["usuario_actual"] = rol
-                st.session_state["nombre_empleado"] = nombre
-                st.rerun()
+                   rol = usuario_encontrado.iloc[0]["Rol"]
+                   nombre = usuario_encontrado.iloc[0]["Nombre"]
+                   sector = usuario_encontrado.iloc[0]["Sector"] # El guardia ahora lee el sector
+                   
+                   st.session_state["usuario_actual"] = rol
+                   st.session_state["nombre_empleado"] = nombre
+                   st.session_state["sector_empleado"] = sector # Le pone la etiqueta en la campera
+                   st.rerun()
             else:
                 st.error("❌ DNI no registrado.")
             
@@ -362,23 +365,25 @@ if st.session_state["usuario_actual"] == "ADMIN":
     
     # Lo que pasa en la pestaña de Usuarios
     with pestaña_usuarios:
-        st.subheader("Registrar Nuevo Usuario")
-        nuevo_dni = st.text_input("DNI o Usuario (ej: 35123456):")
-        nuevo_nombre = st.text_input("Nombre Completo (ej: Juan Perez):")
-        # Aquí repartimos los colores de las pulseras
-        nuevo_rol = st.selectbox("Nivel de Acceso:", ["Chofer", "Supervisor", "Admin"])
-        
-        if st.button("💾 Guardar Usuario"):
-            if nuevo_dni != "" and nuevo_nombre != "":
-                # 1. Abrimos la libreta
-                df_u = pd.read_excel("Base_Usuarios.xlsx")
-                # 2. Escribimos al final de la libreta
-                df_u.loc[len(df_u)] = [nuevo_dni, nuevo_nombre, nuevo_rol]
-                # 3. Guardamos la libreta
-                df_u.to_excel("Base_Usuarios.xlsx", index=False)
-                st.success(f"¡Listo! {nuevo_nombre} ya tiene permiso para entrar como {nuevo_rol}.")
-            else:
-                st.error("Por favor, completa el DNI y el Nombre.")
+           st.subheader("Registrar Nuevo Usuario")
+           nuevo_dni = st.text_input("DNI o Usuario (ej: 35123456):")
+           nuevo_nombre = st.text_input("Nombre Completo (ej: Juan Perez):")
+           
+           # Agregamos el selector de Sector (usamos la lista de autoridades que ya existe)
+           nuevo_sector = st.selectbox("Sector al que pertenece:", list(AUTORIDADES.keys()))
+           
+           # Actualizamos los roles para que coincidan con la realidad
+           nuevo_rol = st.selectbox("Nivel de Acceso:", ["Chofer", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia", "Admin"])
+           
+           if st.button("💾 Guardar Usuario"):
+               if nuevo_dni != "" and nuevo_nombre != "":
+                   df_u = pd.read_excel("Base_Usuarios.xlsx")
+                   # Ahora guardamos los 4 datos, incluyendo el sector
+                   df_u.loc[len(df_u)] = [nuevo_dni, nuevo_nombre, nuevo_rol, nuevo_sector]
+                   df_u.to_excel("Base_Usuarios.xlsx", index=False)
+                   st.success(f"¡Listo! {nuevo_nombre} fue registrado en el sector {nuevo_sector} como {nuevo_rol}.")
+               else:
+                   st.error("Por favor, completa el DNI y el Nombre.")
                 
     # Lo que pasa en la pestaña de Vehículos
     with pestaña_vehiculos:
