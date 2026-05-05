@@ -199,8 +199,15 @@ if nivel_aprobacion_usuario >= nivel_viaje:
     estado_viaje = f"AUTORIZADO (Auto-aprobado por {cargo_elegido})"
     color_alerta = "green"
 else:
-    estado_viaje = "PENDIENTE DE APROBACIÓN (Jefe de Sector / Gerencia)"
-    color_alerta = "orange" if nivel_viaje == 2 else "red"
+    if nivel_viaje == 1:
+        estado_viaje = "PENDIENTE DE APROBACIÓN (Supervisor / Coordinador de Sector)"
+        color_alerta = "orange"
+    elif nivel_viaje == 2:
+        estado_viaje = "PENDIENTE DE APROBACIÓN (Jefe de Servicio)"
+        color_alerta = "orange"
+    else:
+        estado_viaje = "PENDIENTE DE APROBACIÓN (Gerencia)"
+        color_alerta = "red"
 
 st.markdown("---")
 st.subheader("📋 Resultado del Gerenciamiento")
@@ -317,8 +324,22 @@ if st.session_state["usuario_actual"] == "ADMIN" or st.session_state["usuario_ac
         else:
             st.warning(f"⚠️ Tienes {len(viajes_pendientes)} viaje(s) esperando aprobación.")
             # Le mostramos una tablita resumida para que lea rápido
-            st.dataframe(viajes_pendientes[["ID", "Chofer", "Vehiculo", "Destino", "Fecha"]])
-            
+            # --- LISTA INTERACTIVA PARA APROBAR ---
+            for index, viaje in viajes_pendientes.iterrows():
+                # Creamos una cajita desplegable para cada viaje
+                with st.expander(f"🚨 Viaje ID: {viaje['ID']} | Chofer: {viaje['Chofer']} | Nivel de Riesgo: {viaje['Nivel']}"):
+                    st.write(f"**Destino:** {viaje['Destino']}")
+                    st.write(f"**Estado Calculado:** {viaje['Estado']}")
+                    
+                    # El Sello de Goma del Jefe
+                    if st.button(f"✅ Aprobar Viaje {viaje['ID']}", key=f"btn_aprobar_{viaje['ID']}"):
+                        # 1. Le cambiamos la calcomanía en la libreta
+                        df_viajes.loc[index, "Aprobacion"] = "🟢 Aprobado"
+                        # 2. Guardamos la libreta con el cambio
+                        df_viajes.to_excel("Base_Datos_Viajes_Marbar.xlsx", index=False)
+                        # 3. Festejamos y recargamos la página
+                        st.success("¡Viaje aprobado y guardado!")
+                        st.rerun()
     except:
         st.info("La base de viajes aún está vacía.")
 
