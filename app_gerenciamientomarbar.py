@@ -311,8 +311,8 @@ except:
     st.sidebar.write("Aún no hay viajes registrados o el archivo está vacío.")
 
 # --- BANDEJA DE APROBACIONES (Solo para Jefes) ---
-# Solo dejamos pasar al ADMIN o al Supervisor
-if st.session_state["usuario_actual"] == "ADMIN" or st.session_state["usuario_actual"] == "Supervisor":
+# Dejamos pasar a la bandeja a cualquiera que sea autoridad
+if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia"]:
     st.markdown("---")
     st.title("📥 Bandeja de Aprobaciones")
     
@@ -320,19 +320,48 @@ if st.session_state["usuario_actual"] == "ADMIN" or st.session_state["usuario_ac
         # 1. El jefe abre la libreta de todos los viajes
         df_viajes = pd.read_excel("Base_Datos_Viajes_Marbar.xlsx")
         
-        
-        # 2. Truco de seguridad mejorado
+        # 2. Separamos TODOS los que están pendientes primero
         if "Aprobacion" in df_viajes.columns:
-               viajes_pendientes = df_viajes[df_viajes["Aprobacion"] == "🔴 Pendiente"]
+            todos_pendientes = df_viajes[df_viajes["Aprobacion"] == "🔴 Pendiente"]
         else:
-               # Si la columna nueva todavía no se crea, buscamos la palabra "PENDIENTE" en el Estado original
-               viajes_pendientes = df_viajes[df_viajes["Estado"].str.contains("PENDIENTE", na=False)]
+            todos_pendientes = df_viajes[df_viajes["Estado"].str.contains("PENDIENTE", na=False)]
             
-        # 3. Le mostramos los resultados al jefe
-        if viajes_pendientes.empty:
-            st.info("✅ Todo al día. No hay viajes pendientes de aprobación.")
+        # 3. --- EL FILTRO INTELIGENTE SEGÚN EL CARGO ---
+        rol_actual = st.session_state["usuario_actual"]
+        
+        if rol_actual == "ADMIN":
+            viajes_pendientes = todos_pendientes # El Admin ve TODO
+            
+        elif rol_actual == "Gerencia":
+            # Gerencia ve TODO lo de Nivel 3 + Urgencias de Noche (sin importar sector)
+            viajes_pendientes = todos_pendientes[
+                (todos_pendientes["Nivel"] == 3) | 
+                ((todos_pendientes["Salida"] == "Urgencia") & (todos_pendientes["Alarma Nocturna"] == "encendida"))
+            ]
+            
+        elif rol_actual == "Jefe de Servicio":
+            # Nivel 2, pero SOLAMENTE de su propio sector
+            sector_actual = st.session_state.get("sector_empleado", "")
+            viajes_pendientes = todos_pendientes[
+                (todos_pendientes["Nivel"] == 2) & 
+                (todos_pendientes["Sector"] == sector_actual)
+            ]
+            
+        elif rol_actual == "Supervisor / Coordinador":
+            # Nivel 1, pero SOLAMENTE de su propio sector
+            sector_actual = st.session_state.get("sector_empleado", "")
+            viajes_pendientes = todos_pendientes[
+                (todos_pendientes["Nivel"] == 1) & 
+                (todos_pendientes["Sector"] == sector_actual)
+            ]
         else:
-            st.warning(f"⚠️ Tienes {len(viajes_pendientes)} viaje(s) esperando aprobación.")
+            viajes_pendientes = pd.DataFrame() # Por seguridad, si hay error, no ve nada
+
+        # 4. Le mostramos los resultados al jefe
+        if viajes_pendientes.empty:
+            st.info("✅ Todo al día. No tienes viajes pendientes en tu sector/nivel.")
+        else:
+            st.warning(f"⚠️ Tienes {len(viajes_pendientes)} viaje(s) esperando tu aprobación.")
             # Le mostramos una tablita resumida para que lea rápido
             # --- LISTA INTERACTIVA PARA APROBAR ---
             for index, viaje in viajes_pendientes.iterrows():
