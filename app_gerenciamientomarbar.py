@@ -311,12 +311,13 @@ if st.session_state["usuario_actual"] == "ADMIN" or st.session_state["usuario_ac
         # 1. El jefe abre la libreta de todos los viajes
         df_viajes = pd.read_excel("Base_Datos_Viajes_Marbar.xlsx")
         
-        # 2. Truco de seguridad: Revisamos si alguien ya le pegó la calcomanía alguna vez
+        
+        # 2. Truco de seguridad mejorado
         if "Aprobacion" in df_viajes.columns:
-            # Filtramos para ver SOLO los que dicen "🔴 Pendiente"
-            viajes_pendientes = df_viajes[df_viajes["Aprobacion"] == "🔴 Pendiente"]
+               viajes_pendientes = df_viajes[df_viajes["Aprobacion"] == "🔴 Pendiente"]
         else:
-            viajes_pendientes = pd.DataFrame() # Si no existe, dejamos la bandeja vacía
+               # Si la columna nueva todavía no se crea, buscamos la palabra "PENDIENTE" en el Estado original
+               viajes_pendientes = df_viajes[df_viajes["Estado"].str.contains("PENDIENTE", na=False)]
             
         # 3. Le mostramos los resultados al jefe
         if viajes_pendientes.empty:
@@ -403,8 +404,7 @@ try:
     hoy_texto = datetime.now().strftime("%d/%m/%Y")
     
     # 3. Filtramos la libreta para dejar SOLO los viajes que tengan la fecha de hoy
-    viajes_de_hoy = df_tablero[df_tablero["Fecha"].str.contains(hoy_texto, na=False)]
-    
+    viajes_de_hoy = df_tablero[df_tablero["Fecha"].astype(str).str.contains(hoy_texto, na=False)]
     # 4. Mostramos el resultado en el pasillo (Panel lateral)
     if viajes_de_hoy.empty:
         st.sidebar.info("Aún no hay viajes registrados en el día de hoy.")
