@@ -376,14 +376,20 @@ if st.session_state["usuario_actual"] == "ADMIN":
            nuevo_rol = st.selectbox("Nivel de Acceso:", ["Chofer", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia", "Admin"])
            
            if st.button("💾 Guardar Usuario"):
-               if nuevo_dni != "" and nuevo_nombre != "":
-                   df_u = pd.read_excel("Base_Usuarios.xlsx")
-                   # Ahora guardamos los 4 datos, incluyendo el sector
-                   df_u.loc[len(df_u)] = [nuevo_dni, nuevo_nombre, nuevo_rol, nuevo_sector]
-                   df_u.to_excel("Base_Usuarios.xlsx", index=False)
-                   st.success(f"¡Listo! {nuevo_nombre} fue registrado en el sector {nuevo_sector} como {nuevo_rol}.")
-               else:
-                   st.error("Por favor, completa el DNI y el Nombre.")
+            if nuevo_dni != "" and nuevo_nombre != "":
+                df_u = pd.read_excel("Base_Usuarios.xlsx")
+                
+                # --- PARCHE DE COMPATIBILIDAD ---
+                # Si la libreta vieja de GitHub solo tiene 3 columnas, le creamos la cuarta
+                if "Sector" not in df_u.columns:
+                    df_u["Sector"] = "Sin Asignar"
+                    
+                # Ahora sí, guardamos los 4 datos sin que choque
+                df_u.loc[len(df_u)] = [nuevo_dni, nuevo_nombre, nuevo_rol, nuevo_sector]
+                df_u.to_excel("Base_Usuarios.xlsx", index=False)
+                st.success(f"¡Listo! {nuevo_nombre} fue registrado en el sector {nuevo_sector} como {nuevo_rol}.")
+            else:
+                st.error("Por favor, completa el DNI y el Nombre.")
                 
     # Lo que pasa en la pestaña de Vehículos
     with pestaña_vehiculos:
