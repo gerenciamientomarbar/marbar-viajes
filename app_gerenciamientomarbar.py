@@ -32,11 +32,15 @@ def guardar_en_excel(datos_viaje):
     try:
         df_nuevo = pd.DataFrame([datos_viaje])
         try:
-            with pd.ExcelWriter(nombre_db, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
-                df_existente = pd.read_excel(nombre_db)
-                df_nuevo.to_excel(writer, startrow=len(df_existente)+1, header=False, index=False)
+            # Leemos la libreta completa
+            df_existente = pd.read_excel(nombre_db)
+            # Unimos la libreta vieja con el renglón nuevo
+            df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
         except FileNotFoundError:
-            df_nuevo.to_excel(nombre_db, index=False)
+            df_final = df_nuevo # Si no existe, arranca de cero
+            
+        # Guardamos la libreta completa y prolija
+        df_final.to_excel(nombre_db, index=False)
         return True
     except Exception as e:
         st.error(f"Error al guardar: {e}")
@@ -245,7 +249,8 @@ if st.button("CONFIRMAR Y GUARDAR VIAJE"):
                 "Nivel": nivel_viaje,
                 "Alarma Nocturna": alarma_nocturna,
                 "Estado": estado_viaje,
-                "Aprobacion": "🔴 Pendiente" # <--- NUEVA CALCOMANÍA ROJA
+                "Estado": estado_viaje,
+                "Aprobacion": "🟢 Aprobado" if color_alerta == "green" else "🔴 Pendiente" # <--- NUEVA CALCOMANÍA ROJA
             }
             
         exito = guardar_en_excel(datos_para_guardar)
@@ -287,7 +292,8 @@ try:
     
     if cantidad_hoy > 0:
         st.sidebar.write("Choferes en ruta hoy:")
-        st.sidebar.dataframe(viajes_hoy[['Chofer', 'Destino', 'Estado']])
+        # Ahora mostramos la columna 'Aprobacion' para ver el cambio en vivo
+        st.sidebar.dataframe(viajes_hoy[['Chofer', 'Destino', 'Aprobacion']], hide_index=True)
         
     st.sidebar.markdown("---")
     # Preguntamos si la pulsera VIP dice "ADMIN"
@@ -391,26 +397,3 @@ if st.session_state["usuario_actual"] == "ADMIN":
             else:
                 st.error("Por favor, escribe el nombre del vehículo.")
 
-
-# --- TABLERO PÚBLICO DE VIAJES (Para Choferes y Jefes) ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🚦 Estado de Viajes (HOY)")
-
-try:
-    # 1. Abrimos la libreta para que la lea la pantalla pública
-    df_tablero = pd.read_excel("Base_Datos_Viajes_Marbar.xlsx")
-    
-    # 2. Le preguntamos a la computadora qué día es hoy
-    hoy_texto = datetime.now().strftime("%d/%m/%Y")
-    
-    # 3. Filtramos la libreta para dejar SOLO los viajes que tengan la fecha de hoy
-    viajes_de_hoy = df_tablero[df_tablero["Fecha"].astype(str).str.contains(hoy_texto, na=False)]
-    # 4. Mostramos el resultado en el pasillo (Panel lateral)
-    if viajes_de_hoy.empty:
-        st.sidebar.info("Aún no hay viajes registrados en el día de hoy.")
-    else:
-        # Mostramos solo las columnas clave para el chofer
-        st.sidebar.dataframe(viajes_de_hoy[["ID", "Chofer", "Destino", "Aprobacion"]], hide_index=True)
-
-except:
-    st.sidebar.info("La base de datos aún no tiene viajes.")
