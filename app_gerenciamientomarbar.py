@@ -85,7 +85,7 @@ if st.session_state["usuario_actual"] == None:
         # 2. Si no es el jefe, busca el DNI en la libreta de usuarios
         else:
             # Le quitamos el paraguas para ver el error real
-            df_usuarios = pd.read_excel("Base_Usuarios.xlsx")
+            df_usuarios = obtener_usuarios()
             usuario_encontrado = df_usuarios[df_usuarios["DNI_Usuario"].astype(str) == str(usuario_ingresado)]
             
             if not usuario_encontrado.empty:
@@ -459,4 +459,3 @@ if st.session_state["usuario_actual"] == "ADMIN":
         # Mostramos la lista viva desde la nube
         st.write("Vehículos en Flota:")
         st.dataframe(obtener_vehiculos(), hide_index=True)
-        
