@@ -21,16 +21,23 @@ if not firebase_admin._apps:
 # Abrimos la puerta de la bóveda
 db = firestore.client()
 
-# --- PREPARAR LIBRETAS DE USUARIOS Y VEHICULOS (Mantenemos Excel temporalmente para esto) ---
-def preparar_libretas():
-    if not os.path.exists("Base_Usuarios.xlsx"):
-        df_u = pd.DataFrame(columns=["DNI_Usuario", "Nombre", "Rol", "Sector"])
-        df_u.to_excel("Base_Usuarios.xlsx", index=False)
-    if not os.path.exists("Base_Vehiculos.xlsx"):
-        df_v = pd.DataFrame(columns=["Vehiculo"])
-        df_v.to_excel("Base_Vehiculos.xlsx", index=False)
+# --- CONECTORES DE USUARIOS Y VEHÍCULOS (NUBE) ---
+def obtener_usuarios():
+    usuarios_ref = db.collection("usuarios").stream()
+    lista = [doc.to_dict() for doc in usuarios_ref]
+    if not lista:
+        # Si la bóveda está vacía, creamos la llave maestra para no quedarnos afuera
+        admin_data = {"DNI_Usuario": "12345678", "Nombre": "ADMIN", "Rol": "ADMIN", "Sector": "Gerencia"}
+        db.collection("usuarios").document("12345678").set(admin_data)
+        return pd.DataFrame([admin_data])
+    return pd.DataFrame(lista)
 
-preparar_libretas()
+def obtener_vehiculos():
+    vehiculos_ref = db.collection("vehiculos").stream()
+    lista = [doc.to_dict() for doc in vehiculos_ref]
+    if not lista:
+        return pd.DataFrame(columns=["Vehiculo"])
+    return pd.DataFrame(lista)
 
 # --- NUEVAS FUNCIONES DE BASE DE DATOS (NUBE) ---
 def obtener_siguiente_id():
@@ -101,6 +108,33 @@ if st.session_state["usuario_actual"] == None:
 st.title("Gestión de Viajes - MARBAR")
 st.subheader("Formulario de Despacho Seguro")
 
+st.title("Gestión de Viajes - MARBAR")
+
+# --- MIS VIAJES EN CURSO (El botón de llegada del Chofer) ---
+# Solo se lo mostramos a los usuarios normales (no al ADMIN)
+if st.session_state["usuario_actual"] != "ADMIN":
+    # 1. Buscamos en la nube y filtramos los viajes aprobados de este chofer
+    viajes_ref = db.collection("viajes").stream()
+    mis_activos = [doc.to_dict() for doc in viajes_ref if doc.to_dict().get("Chofer") == st.session_state["nombre_empleado"] and doc.to_dict().get("Aprobacion") == "🟢 Aprobado"]
+    
+    # 2. Si tiene viajes en ruta, le mostramos el cartel y el botón
+    if len(mis_activos) > 0:
+        st.info("📍 Tienes viajes en curso. ¡No olvides avisar cuando llegues a destino!")
+        for viaje in mis_activos:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.write(f"**Viaje ID {viaje['ID']}** | Destino: {viaje['Destino']}")
+            with col2:
+                if st.button(f"🏁 Llegué a Destino", key=f"btn_llegar_{viaje['ID']}"):
+                    # Le ponemos el sello final en la nube
+                    db.collection("viajes").document(str(viaje['ID'])).update({"Aprobacion": "🏁 Finalizado"})
+                    st.success("¡Llegada registrada exitosamente! Buen trabajo.")
+                    st.rerun()
+        st.markdown("---")
+
+st.subheader("Formulario de Despacho Seguro")
+
+
 # 1. LA AGENDA COMPLETA DE MARBAR
 AUTORIDADES = {
     "Higiene y Seguridad": {"Coordinador SSA": 1, "Jefe SSA": 2},
@@ -131,9 +165,9 @@ else:
 # --- LECTURA AUTOMÁTICA DE VEHÍCULOS ---
 # 1. Le decimos al código que abra la libreta de vehículos
 try:
-    df_vehiculos = pd.read_excel("Base_Vehiculos.xlsx")
+    df_v = obtener_vehiculos()
     # Sacamos los nombres de la columna "Vehiculo" y armamos una lista simple
-    lista_vehiculos = df_vehiculos["Vehiculo"].tolist()
+    lista_vehiculos = df_v["Vehiculo"].tolist()
 except:
     lista_vehiculos = [] # Si hay un error, dejamos la lista vacía temporalmente
 
@@ -277,111 +311,98 @@ if st.button("CONFIRMAR Y GUARDAR VIAJE"):
 st.sidebar.markdown("---")
 st.sidebar.header("📊 Resumen de Gestión")
 try:
-    df_excel = pd.read_excel("Base_Datos_Viajes_Marbar.xlsx")
+    # 1. Buscamos TODOS los viajes en la nube
+    viajes_ref = db.collection("viajes").stream()
+    lista_viajes = [doc.to_dict() for doc in viajes_ref]
     
-    # Buscamos la fecha de hoy y el mes actual
-    fecha_hoy_str = datetime.now().strftime("%d/%m/%Y")
-    mes_actual_str = datetime.now().strftime("/%m/%Y") 
-    
-    # Filtramos
-    viajes_hoy = df_excel[df_excel['Fecha'].astype(str).str.contains(fecha_hoy_str, na=False)]
-    viajes_mes = df_excel[df_excel['Fecha'].astype(str).str.contains(mes_actual_str, na=False)]
-    
-    cantidad_hoy = len(viajes_hoy)
-    cantidad_mes = len(viajes_mes)
-    
-    # Mostramos los dos números grandes
-    st.sidebar.metric("Viajes registrados HOY", cantidad_hoy)
-    st.sidebar.metric("Viajes de este MES", cantidad_mes)
-    
-    if cantidad_hoy > 0:
-        st.sidebar.write("Choferes en ruta hoy:")
-        # Ahora mostramos la columna 'Aprobacion' para ver el cambio en vivo
-        st.sidebar.dataframe(viajes_hoy[['Chofer', 'Destino', 'Aprobacion']], hide_index=True)
+    if len(lista_viajes) > 0:
+        df_nube = pd.DataFrame(lista_viajes)
         
-    st.sidebar.markdown("---")
-    # Preguntamos si la pulsera VIP dice "ADMIN"
-    if st.session_state["usuario_actual"] == "ADMIN":
-        with open("Base_Datos_Viajes_Marbar.xlsx", "rb") as archivo_excel:
+        fecha_hoy_str = datetime.now().strftime("%d/%m/%Y")
+        mes_actual_str = datetime.now().strftime("/%m/%Y")
+        
+        # Filtramos viajes del día y del mes para las métricas
+        viajes_hoy = df_nube[df_nube['Fecha'].astype(str).str.contains(fecha_hoy_str, na=False)]
+        viajes_mes = df_nube[df_nube['Fecha'].astype(str).str.contains(mes_actual_str, na=False)]
+        
+        st.sidebar.metric("Viajes registrados HOY", len(viajes_hoy))
+        st.sidebar.metric("Viajes de este MES", len(viajes_mes))
+        
+        # --- TABLERO EN RUTA ---
+        # Solo mostramos los que están APROBADOS pero que aún NO han finalizado
+        viajes_en_ruta = viajes_hoy[viajes_hoy['Aprobacion'] == "🟢 Aprobado"]
+        
+        if not viajes_en_ruta.empty:
+            st.sidebar.write("🚚 **En ruta ahora:**")
+            st.sidebar.dataframe(viajes_en_ruta[['Chofer', 'Destino']], hide_index=True)
+        else:
+            st.sidebar.write("✅ No hay vehículos en ruta ahora.")
+            
+        # Botón de descarga para el ADMIN (Genera el Excel desde la nube)
+        if st.session_state["usuario_actual"] == "ADMIN":
+            st.sidebar.markdown("---")
+            import io
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df_nube.to_excel(writer, index=False, sheet_name='Viajes_Marbar')
+            
             st.sidebar.download_button(
                 label="📥 DESCARGAR BASE DE DATOS (EXCEL)",
-                data=archivo_excel,
-                file_name="Base_Datos_Viajes_Marbar_Actualizada.xlsx"
+                data=buffer.getvalue(),
+                file_name=f"Reporte_Marbar_{fecha_hoy_str.replace('/','-')}.xlsx",
+                mime="application/vnd.ms-excel"
             )
-except:
-    st.sidebar.write("Aún no hay viajes registrados o el archivo está vacío.")
+    else:
+        st.sidebar.info("Aún no hay viajes en la base de datos.")
+except Exception as e:
+    st.sidebar.error(f"Error al conectar con la nube: {e}")
 
-# --- BANDEJA DE APROBACIONES (Solo para Jefes) ---
-# Dejamos pasar a la bandeja a cualquiera que sea autoridad
+# --- BANDEJA DE APROBACIONES (Solo para Autoridades) ---
 if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia"]:
     st.markdown("---")
     st.title("📥 Bandeja de Aprobaciones")
     
     try:
-        # 1. El jefe abre la libreta de todos los viajes
-        df_viajes = pd.read_excel("Base_Datos_Viajes_Marbar.xlsx")
+        # 1. Traemos la lista actualizada de la nube
+        viajes_ref = db.collection("viajes").stream()
+        lista_viajes = [doc.to_dict() for doc in viajes_ref]
+        df_viajes = pd.DataFrame(lista_viajes)
         
-        # 2. Separamos TODOS los que están pendientes primero
-        if "Aprobacion" in df_viajes.columns:
-            todos_pendientes = df_viajes[df_viajes["Aprobacion"] == "🔴 Pendiente"]
-        else:
-            todos_pendientes = df_viajes[df_viajes["Estado"].str.contains("PENDIENTE", na=False)]
-            
-        # 3. --- EL FILTRO INTELIGENTE SEGÚN EL CARGO ---
+        # 2. Filtramos solo los pendientes
+        viajes_pendientes = df_viajes[df_viajes["Aprobacion"] == "🔴 Pendiente"]
+        
+        # 3. Aplicamos el Filtro Inteligente por Cargo/Sector
         rol_actual = st.session_state["usuario_actual"]
+        sector_actual = st.session_state.get("sector_empleado", "")
         
         if rol_actual == "ADMIN":
-            viajes_pendientes = todos_pendientes # El Admin ve TODO
-            
+            mis_pendientes = viajes_pendientes
         elif rol_actual == "Gerencia":
-            # Gerencia ve TODO lo de Nivel 3 + Urgencias de Noche (sin importar sector)
-            viajes_pendientes = todos_pendientes[
-                (todos_pendientes["Nivel"] == 3) | 
-                ((todos_pendientes["Salida"] == "Urgencia") & (todos_pendientes["Alarma Nocturna"] == "encendida"))
-            ]
-            
+            mis_pendientes = viajes_pendientes[(viajes_pendientes["Nivel"] == 3) | ((viajes_pendientes["Salida"] == "Urgencia") & (viajes_pendientes["Alarma Nocturna"] == "encendida"))]
         elif rol_actual == "Jefe de Servicio":
-            # Nivel 2, pero SOLAMENTE de su propio sector
-            sector_actual = st.session_state.get("sector_empleado", "")
-            viajes_pendientes = todos_pendientes[
-                (todos_pendientes["Nivel"] == 2) & 
-                (todos_pendientes["Sector"] == sector_actual)
-            ]
-            
+            mis_pendientes = viajes_pendientes[(viajes_pendientes["Nivel"] == 2) & (viajes_pendientes["Sector"] == sector_actual)]
         elif rol_actual == "Supervisor / Coordinador":
-            # Nivel 1, pero SOLAMENTE de su propio sector
-            sector_actual = st.session_state.get("sector_empleado", "")
-            viajes_pendientes = todos_pendientes[
-                (todos_pendientes["Nivel"] == 1) & 
-                (todos_pendientes["Sector"] == sector_actual)
-            ]
+            mis_pendientes = viajes_pendientes[(viajes_pendientes["Nivel"] == 1) & (viajes_pendientes["Sector"] == sector_actual)]
         else:
-            viajes_pendientes = pd.DataFrame() # Por seguridad, si hay error, no ve nada
+            mis_pendientes = pd.DataFrame()
 
-        # 4. Le mostramos los resultados al jefe
-        if viajes_pendientes.empty:
-            st.info("✅ Todo al día. No tienes viajes pendientes en tu sector/nivel.")
+        # 4. Interfaz de aprobación
+        if mis_pendientes.empty:
+            st.info("✅ No tienes viajes pendientes de aprobación en tu nivel/sector.")
         else:
-            st.warning(f"⚠️ Tienes {len(viajes_pendientes)} viaje(s) esperando tu aprobación.")
-            # Le mostramos una tablita resumida para que lea rápido
-            # --- LISTA INTERACTIVA PARA APROBAR ---
-            for index, viaje in viajes_pendientes.iterrows():
-                # Creamos una cajita desplegable para cada viaje
-                with st.expander(f"🚨 Viaje ID: {viaje['ID']} | Chofer: {viaje['Chofer']} | Nivel de Riesgo: {viaje['Nivel']}"):
-                    st.write(f"**Destino:** {viaje['Destino']}")
-                    st.write(f"**Estado Calculado:** {viaje['Estado']}")
+            st.warning(f"⚠️ Tienes {len(mis_pendientes)} viaje(s) esperando tu firma.")
+            for index, viaje in mis_pendientes.iterrows():
+                with st.expander(f"🚨 ID: {viaje['ID']} | {viaje['Chofer']} | Riesgo: {viaje['Nivel']}"):
+                    st.write(f"**Origen/Destino:** {viaje['Origen']} -> {viaje['Destino']}")
+                    st.write(f"**Motivo:** {viaje['Estado']}")
                     
-                    # El Sello de Goma del Jefe
-                    if st.button(f"✅ Aprobar Viaje {viaje['ID']}", key=f"btn_aprobar_{viaje['ID']}"):
-                        # 1. Le cambiamos la calcomanía en la libreta
-                        df_viajes.loc[index, "Aprobacion"] = "🟢 Aprobado"
-                        # 2. Guardamos la libreta con el cambio
-                        df_viajes.to_excel("Base_Datos_Viajes_Marbar.xlsx", index=False)
-                        # 3. Festejamos y recargamos la página
-                        st.success("¡Viaje aprobado y guardado!")
+                    if st.button(f"✅ Sellar Aprobación {viaje['ID']}", key=f"btn_aprob_{viaje['ID']}"):
+                        # ACTUALIZACIÓN EN LA NUBE
+                        db.collection("viajes").document(str(viaje['ID'])).update({"Aprobacion": "🟢 Aprobado"})
+                        st.success("¡Viaje aprobado en la nube!")
                         st.rerun()
     except:
-        st.info("La base de viajes aún está vacía.")
+        st.info("Buscando viajes en la nube...")
 
 
 # --- 7. OFICINA SECRETA DE ADMINISTRACIÓN ---
@@ -395,31 +416,30 @@ if st.session_state["usuario_actual"] == "ADMIN":
     
     # Lo que pasa en la pestaña de Usuarios
     with pestaña_usuarios:
-           st.subheader("Registrar Nuevo Usuario")
-           nuevo_dni = st.text_input("DNI o Usuario (ej: 35123456):")
-           nuevo_nombre = st.text_input("Nombre Completo (ej: Juan Perez):")
-           
-           # Agregamos el selector de Sector (usamos la lista de autoridades que ya existe)
-           nuevo_sector = st.selectbox("Sector al que pertenece:", list(AUTORIDADES.keys()))
-           
-           # Actualizamos los roles para que coincidan con la realidad
-           nuevo_rol = st.selectbox("Nivel de Acceso:", ["Chofer", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia", "Admin"])
-           
-           if st.button("💾 Guardar Usuario"):
+        st.subheader("Registrar Nuevo Usuario")
+        nuevo_dni = st.text_input("DNI o Usuario (ej: 35123456):")
+        nuevo_nombre = st.text_input("Nombre Completo (ej: Juan Perez):")
+        
+        # Agregamos el selector de Sector 
+        nuevo_sector = st.selectbox("Sector al que pertenece:", ["Higiene y Seguridad", "Operaciones", "Mantenimiento", "Gerencia"])
+        
+        # Actualizamos los roles (Ojo: ADMIN va todo en mayúsculas para que coincida)
+        nuevo_rol = st.selectbox("Nivel de Acceso:", ["Chofer", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia", "ADMIN"])
+        
+        if st.button("💾 Guardar Usuario"):
             if nuevo_dni != "" and nuevo_nombre != "":
-                df_u = pd.read_excel("Base_Usuarios.xlsx")
+                # --- GUARDAMOS DIRECTO EN LA NUBE (FIREBASE) ---
+                datos_u = {"DNI_Usuario": str(nuevo_dni), "Nombre": nuevo_nombre, "Rol": nuevo_rol, "Sector": nuevo_sector}
+                db.collection("usuarios").document(str(nuevo_dni)).set(datos_u)
                 
-                # --- PARCHE DE COMPATIBILIDAD ---
-                # Si la libreta vieja de GitHub solo tiene 3 columnas, le creamos la cuarta
-                if "Sector" not in df_u.columns:
-                    df_u["Sector"] = "Sin Asignar"
-                    
-                # Ahora sí, guardamos los 4 datos sin que choque
-                df_u.loc[len(df_u)] = [nuevo_dni, nuevo_nombre, nuevo_rol, nuevo_sector]
-                df_u.to_excel("Base_Usuarios.xlsx", index=False)
-                st.success(f"¡Listo! {nuevo_nombre} fue registrado en el sector {nuevo_sector} como {nuevo_rol}.")
+                st.success(f"¡Listo! {nuevo_nombre} fue registrado en la nube.")
+                st.rerun()
             else:
                 st.error("Por favor, completa el DNI y el Nombre.")
+        
+        # Mostramos la lista viva desde la nube
+        st.write("Usuarios Registrados en el Sistema:")
+        st.dataframe(obtener_usuarios(), hide_index=True)
                 
     # Lo que pasa en la pestaña de Vehículos
     with pestaña_vehiculos:
@@ -428,13 +448,15 @@ if st.session_state["usuario_actual"] == "ADMIN":
         
         if st.button("💾 Guardar Vehículo"):
             if nuevo_vehiculo != "":
-                # 1. Abrimos la libreta
-                df_v = pd.read_excel("Base_Vehiculos.xlsx")
-                # 2. Escribimos al final
-                df_v.loc[len(df_v)] = [nuevo_vehiculo]
-                # 3. Guardamos la libreta
-                df_v.to_excel("Base_Vehiculos.xlsx", index=False)
-                st.success(f"¡Listo! El vehículo {nuevo_vehiculo} fue agregado a la flota.")
+                # --- GUARDAMOS DIRECTO EN LA NUBE (FIREBASE) ---
+                db.collection("vehiculos").document(nuevo_vehiculo).set({"Vehiculo": nuevo_vehiculo})
+                
+                st.success(f"¡Listo! El vehículo {nuevo_vehiculo} fue agregado a la flota en la nube.")
+                st.rerun()
             else:
                 st.error("Por favor, escribe el nombre del vehículo.")
-
+                
+        # Mostramos la lista viva desde la nube
+        st.write("Vehículos en Flota:")
+        st.dataframe(obtener_vehiculos(), hide_index=True)
+        
