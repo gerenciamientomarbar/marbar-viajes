@@ -1,50 +1,57 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import os # Herramienta para revisar si los archivos existen en la computadora
+import os
+import json
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
 
-# --- PREPARAR LIBRETAS (BASES DE DATOS) ---
+# --- CONEXIÓN A LA BÓVEDA EN LA NUBE (FIREBASE) ---
+# El guardia revisa si la conexión ya está abierta
+if not firebase_admin._apps:
+    try:
+        # Lee la llave de oro que escondiste en los Secretos de Streamlit
+        llave_secreta = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
+        cred = credentials.Certificate(llave_secreta)
+        firebase_admin.initialize_app(cred)
+    except Exception as e:
+        st.error(f"Error con la llave secreta: {e}")
+
+# Abrimos la puerta de la bóveda
+db = firestore.client()
+
+# --- PREPARAR LIBRETAS DE USUARIOS Y VEHICULOS (Mantenemos Excel temporalmente para esto) ---
 def preparar_libretas():
-    # Si la libreta de Usuarios no existe, la crea con 3 columnas
     if not os.path.exists("Base_Usuarios.xlsx"):
-        # Agregamos la columna 'Sector' a la lista
-        df_u = pd.DataFrame(columns=["DNI_Usuario", "Nombre", "Rol", "Sector"]) 
+        df_u = pd.DataFrame(columns=["DNI_Usuario", "Nombre", "Rol", "Sector"])
         df_u.to_excel("Base_Usuarios.xlsx", index=False)
-    
-    # Si la libreta de Vehículos no existe, la crea con 1 columna
     if not os.path.exists("Base_Vehiculos.xlsx"):
         df_v = pd.DataFrame(columns=["Vehiculo"])
         df_v.to_excel("Base_Vehiculos.xlsx", index=False)
 
-preparar_libretas() # Aquí le damos la orden de ejecutar la revisión
+preparar_libretas()
 
-# --- FUNCIONES DE BASE DE DATOS ---
-def obtener_siguiente_id(nombre_archivo):
+# --- NUEVAS FUNCIONES DE BASE DE DATOS (NUBE) ---
+def obtener_siguiente_id():
     try:
-        df_existente = pd.read_excel(nombre_archivo)
-        if df_existente.empty: 
-            return 1
-        return int(df_existente['ID'].max() + 1)
+        # Busca en Firebase cuál fue el último ID usado
+        viajes_ref = db.collection("viajes").order_by("ID", direction=firestore.Query.DESCENDING).limit(1).get()
+        if viajes_ref:
+            return viajes_ref[0].to_dict().get("ID", 0) + 1
+        else:
+            return 1 # Si la bóveda está vacía, empezamos en 1
     except:
         return 1
 
-def guardar_en_excel(datos_viaje):
-    nombre_db = "Base_Datos_Viajes_Marbar.xlsx"
+def guardar_en_nube(datos_viaje):
     try:
-        df_nuevo = pd.DataFrame([datos_viaje])
-        try:
-            # Leemos la libreta completa
-            df_existente = pd.read_excel(nombre_db)
-            # Unimos la libreta vieja con el renglón nuevo
-            df_final = pd.concat([df_existente, df_nuevo], ignore_index=True)
-        except FileNotFoundError:
-            df_final = df_nuevo # Si no existe, arranca de cero
-            
-        # Guardamos la libreta completa y prolija
-        df_final.to_excel(nombre_db, index=False)
+        # Guardamos el viaje en una "carpeta" con su ID dentro de la colección "viajes"
+        doc_ref = db.collection("viajes").document(str(datos_viaje["ID"]))
+        doc_ref.set(datos_viaje)
         return True
     except Exception as e:
-        st.error(f"Error al guardar: {e}")
+        st.error(f"Error al guardar en la nube: {e}")
         return False
 
 
@@ -228,49 +235,43 @@ else:
 
 # --- 5. GUARDADO DE DATOS ---
 if st.button("CONFIRMAR Y GUARDAR VIAJE"):
-        # --- EL CANDADO DE SEGURIDAD ---
-        # Revisamos que NINGUNA variable esté vacía o en None
+    # --- EL CANDADO DE SEGURIDAD ---
     if chofer == "" or origen == "" or destino == "" or tipo_salida == None or distancia == None or clima == None or pasajeros == None or camino == None or dormio == None or horas_totales == None or escolta == None or horario == None or comunicacion == None:
-            st.error("⛔ ALTO: Por favor, responde TODAS las preguntas y completa todos los campos de texto antes de guardar el viaje.")
+        st.error("⛔ ALTO: Por favor, responde TODAS las preguntas y completa todos los campos de texto antes de guardar el viaje.")
     else:
-            # (AQUÍ DEBAJO QUEDA TODO EL RESTO DE TU CÓDIGO QUE YA ESTABA: nuevo_id = ..., etc.)
-        nuevo_id = obtener_siguiente_id("Base_Datos_Viajes_Marbar.xlsx")
+        # Usamos los motores nuevos de la nube
+        nuevo_id = obtener_siguiente_id()
         ahora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        
+
         datos_para_guardar = {
-                "ID": nuevo_id,
-                "Fecha": ahora,
-                "Chofer": chofer,
-                "Sector": sector_elegido,
-                "Cargo": cargo_elegido,
-                "Vehiculo": vehiculo,
-                "Origen": origen,
-                "Destino": destino,
-                "Duracion": duracion,
-                "Salida": tipo_salida,
-                "Puntaje": puntaje,
-                "Nivel": nivel_viaje,
-                "Alarma Nocturna": alarma_nocturna,
-                "Estado": estado_viaje,
-                "Estado": estado_viaje,
-                "Aprobacion": "🟢 Aprobado" if color_alerta == "green" else "🔴 Pendiente" # <--- NUEVA CALCOMANÍA ROJA
-            }
-            
-        exito = guardar_en_excel(datos_para_guardar)
+            "ID": nuevo_id,
+            "Fecha": ahora,
+            "Chofer": chofer,
+            "Sector": sector_elegido,
+            "Cargo": cargo_elegido,
+            "Vehiculo": vehiculo,
+            "Origen": origen,
+            "Destino": destino,
+            "Duracion": duracion,
+            "Salida": tipo_salida,
+            "Puntaje": puntaje,
+            "Nivel": nivel_viaje,
+            "Alarma Nocturna": alarma_nocturna,
+            "Estado": estado_viaje,
+            "Aprobacion": "🟢 Aprobado" if color_alerta == "green" else "🔴 Pendiente"
+        }
+
+        # Guardamos en Firebase
+        exito = guardar_en_nube(datos_para_guardar)
         if exito:
-                st.balloons()
-                st.success(f"¡Éxito! Viaje ID {nuevo_id} registrado en el sistema de Marbar.")
-                
-                # --- EL TIMBRE DE WHATSAPP ---
-                # 1. Escribimos la carta que va a mandar el chofer
-                mensaje = f"Hola! Acabo de cargar el viaje ID {nuevo_id} con destino a {destino}. Por favor apruébalo cuando puedas."
-                # 2. Reemplazamos los espacios por %20 (internet no entiende los espacios en blanco en los links)
-                mensaje_internet = mensaje.replace(" ", "%20")
-                # 3. Armamos el link mágico de WhatsApp
-                link_whatsapp = f"https://wa.me/?text={mensaje_internet}"
-                
-                # 4. Mostramos el botón gigante en la pantalla
-                st.markdown(f"### [📲 TOCA AQUÍ PARA AVISAR AL JEFE POR WHATSAPP]({link_whatsapp})")
+            st.balloons()
+            st.success(f"¡Éxito! Viaje ID {nuevo_id} registrado en el sistema en la nube de Marbar.")
+            
+            # --- EL TIMBRE DE WHATSAPP ---
+            mensaje = f"Hola! Acabo de cargar el viaje ID {nuevo_id} con destino a {destino}. Por favor apruébalo cuando puedas."
+            mensaje_internet = mensaje.replace(" ", "%20")
+            link_whatsapp = f"https://wa.me/?text={mensaje_internet}"
+            st.markdown(f"### [📲 TOCA AQUÍ PARA AVISAR AL JEFE POR WHATSAPP]({link_whatsapp})")
 
 # --- 6. PANEL LATERAL (RESUMEN Y DESCARGA) ---
 st.sidebar.markdown("---")
