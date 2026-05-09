@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from datetime import datetime
 import os
@@ -161,11 +162,16 @@ with col1:
 with col2:
     destino = st.text_input("Destino:")
 
-# --- MAGIA GOOGLE MAPS ---
+# --- MAPA DE EQUIPOS Y YACIMIENTOS ---
+with st.expander("📍 Consultar Mapa de Equipos en Yacimientos"):
+    st.write("Consulta la ubicación de los equipos para definir origen y destino con precisión.")
+    components.iframe("https://www.google.com/maps/d/u/2/embed?mid=1BPDw99m6vQAC09Kdbw9Onaj5mu-blw4&ehbc=2E312F", height=480)
+
+# --- AYUDA DE RUTA GOOGLE MAPS ---
 if origen != "" and destino != "":
     link_maps = f"https://www.google.com/maps/dir/?api=1&origin={origen.replace(' ', '+')}&destination={destino.replace(' ', '+')}"
-    st.info("💡 **Ayuda de Ruta:**")
-    st.markdown(f"[🗺️ Abrir Google Maps para ver la ruta y distancia]({link_maps})")
+    st.info("💡 **Cálculo de Distancia:**")
+    st.markdown(f"[🗺️ Ver ruta en Google Maps para obtener la distancia exacta]({link_maps})")
 
 duracion = st.text_input("Duración estimada (ej: 2 horas):")
 tipo_salida = st.radio("Tipo de Salida:", ["Planificada", "Urgencia"], index=None)
@@ -271,11 +277,26 @@ if st.button("CONFIRMAR Y GUARDAR VIAJE"):
             st.balloons()
             st.success(f"¡Éxito! Viaje ID {nuevo_id} registrado en el sistema en la nube de Marbar.")
 
-            # --- EL TIMBRE DE WHATSAPP ---
-            mensaje = f"Hola! Acabo de cargar el viaje ID {nuevo_id} con destino a {destino}. Por favor apruébalo cuando puedas."
-            mensaje_internet = mensaje.replace(" ", "%20")
+            # --- EL TIMBRE DE WHATSAPP (TICKET DETALLADO) ---
+            import urllib.parse
+            
+            # Armamos el ticket con formato de WhatsApp (* para negritas, \n para enter)
+            mensaje = (
+                f"🚨 *NUEVA SOLICITUD DE VIAJE - ID {nuevo_id}* 🚨\n\n"
+                f"👤 *Chofer:* {chofer}\n"
+                f"🚙 *Vehículo:* {vehiculo}\n"
+                f"📍 *Origen:* {origen}\n"
+                f"🏁 *Destino:* {destino}\n"
+                f"⏱️ *Duración Est.:* {duracion}\n"
+                f"⚠️ *Nivel de Riesgo:* Nivel {nivel_viaje} (Puntaje: {puntaje})\n\n"
+                f"👉 Por favor, revisa y aprueba el viaje en la plataforma MARBAR."
+            )
+            
+            # La herramienta urllib traduce los saltos de línea para que WhatsApp los entienda
+            mensaje_internet = urllib.parse.quote(mensaje)
             link_whatsapp = f"https://wa.me/?text={mensaje_internet}"
-            st.markdown(f"### [📲 TOCA AQUÍ PARA AVISAR AL JEFE POR WHATSAPP]({link_whatsapp})")
+            
+            st.markdown(f"### [📲 TOCA AQUÍ PARA ENVIAR EL TICKET AL JEFE]({link_whatsapp})")
 
 # --- 6. PANEL LATERAL (RESUMEN Y DESCARGA) ---
 st.sidebar.markdown("---")
@@ -287,15 +308,13 @@ try:
     if len(lista_viajes) > 0:
         df_nube = pd.DataFrame(lista_viajes)
         fecha_hoy_str = datetime.now().strftime("%d/%m/%Y")
-        mes_actual_str = datetime.now().strftime("/%m/%Y")
 
         viajes_hoy = df_nube[df_nube['Fecha'].astype(str).str.contains(fecha_hoy_str, na=False)]
-        viajes_mes = df_nube[df_nube['Fecha'].astype(str).str.contains(mes_actual_str, na=False)]
+        viajes_mes = df_nube[df_nube['Fecha'].astype(str).str.contains(datetime.now().strftime("/%m/%Y"), na=False)]
 
         st.sidebar.metric("Viajes registrados HOY", len(viajes_hoy))
         st.sidebar.metric("Viajes de este MES", len(viajes_mes))
 
-        # --- TABLERO EN RUTA Y PENDIENTES ---
         viajes_pendientes = viajes_hoy[viajes_hoy['Aprobacion'] == "🔴 Pendiente"]
         viajes_en_ruta = viajes_hoy[viajes_hoy['Aprobacion'] == "🟢 Aprobado"]
 
@@ -335,7 +354,6 @@ except Exception as e:
 if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia"]:
     st.markdown("---")
     st.title("📥 Bandeja de Aprobaciones")
-
     try:
         viajes_ref = db.collection("viajes").stream()
         lista_viajes = [doc.to_dict() for doc in viajes_ref]
@@ -357,84 +375,61 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador", "
             mis_pendientes = pd.DataFrame()
 
         if mis_pendientes.empty:
-            st.info("✅ No tienes viajes pendientes de aprobación en tu nivel/sector.")
+            st.info("✅ No tienes viajes pendientes en tu nivel/sector.")
         else:
-            st.warning(f"⚠️ Tienes {len(mis_pendientes)} viaje(s) esperando tu firma.")
+            st.warning(f"⚠️ Tienes {len(mis_pendientes)} viaje(s) esperando.")
             for index, viaje in mis_pendientes.iterrows():
-                with st.expander(f"🚨 ID: {viaje['ID']} | {viaje['Chofer']} | Riesgo: {viaje['Nivel']}"):
-                    st.write(f"**Origen/Destino:** {viaje['Origen']} -> {viaje['Destino']}")
-                    st.write(f"**Motivo:** {viaje['Estado']}")
-
+                with st.expander(f"🚨 ID: {viaje['ID']} | {viaje['Chofer']}"):
+                    st.write(f"**Ruta:** {viaje['Origen']} -> {viaje['Destino']}")
                     if st.button(f"✅ Sellar Aprobación {viaje['ID']}", key=f"btn_aprob_{viaje['ID']}"):
                         db.collection("viajes").document(str(viaje['ID'])).update({"Aprobacion": "🟢 Aprobado"})
-                        st.success("¡Viaje aprobado en la nube!")
+                        st.success("Aprobado!")
                         st.rerun()
     except:
-        st.info("Buscando viajes en la nube...")
+        st.info("Buscando viajes...")
 
 # --- 7. OFICINA SECRETA DE ADMINISTRACIÓN ---
 if st.session_state["usuario_actual"] == "ADMIN":
     st.markdown("---")
     st.title("🛠️ Oficina de Administración")
-    
-    pestaña_usuarios, pestaña_vehiculos = st.tabs(["👥 Gestionar Usuarios", "🚘 Gestionar Vehículos"])
+    pestaña_usuarios, pestaña_vehiculos = st.tabs(["👥 Usuarios", "🚘 Vehículos"])
 
-    # --- PESTAÑA USUARIOS ---
     with pestaña_usuarios:
-        st.subheader("Crear / Editar Usuario")
-        st.info("💡 Tip: Para EDITAR un usuario, simplemente vuelve a escribir su DNI con los datos nuevos y presiona Guardar. Se actualizará automáticamente.")
-        nuevo_dni = st.text_input("DNI o Usuario (ej: 35123456):")
-        nuevo_nombre = st.text_input("Nombre Completo (ej: Juan Perez):")
-        nuevo_sector = st.selectbox("Sector al que pertenece:", ["Higiene y Seguridad", "Fluidos", "Control de Sólidos", "Completación", "Administración", "Mantenimiento", "Gerencia"])
-        nuevo_rol = st.selectbox("Nivel de Acceso:", ["Chofer", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia", "ADMIN"])
+        nuevo_dni = st.text_input("DNI o Usuario:")
+        nuevo_nombre = st.text_input("Nombre Completo:")
+        nuevo_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Fluidos", "Control de Sólidos", "Completación", "Administración", "Mantenimiento", "Gerencia"])
+        nuevo_rol = st.selectbox("Nivel:", ["Chofer", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia", "ADMIN"])
 
-        if st.button("💾 Guardar / Editar Usuario"):
-            if nuevo_dni != "" and nuevo_nombre != "":
+        if st.button("💾 Guardar Usuario"):
+            if nuevo_dni and nuevo_nombre:
                 datos_u = {"DNI_Usuario": str(nuevo_dni), "Nombre": nuevo_nombre, "Rol": nuevo_rol, "Sector": nuevo_sector}
                 db.collection("usuarios").document(str(nuevo_dni)).set(datos_u)
-                st.success(f"¡Listo! {nuevo_nombre} fue guardado/actualizado en la nube.")
+                st.success("Guardado!")
                 st.rerun()
-            else:
-                st.error("Por favor, completa el DNI y el Nombre.")
         
-        st.markdown("---")
-        st.subheader("🗑️ Eliminar Usuario")
         df_u_actual = obtener_usuarios()
+        st.subheader("🗑️ Eliminar")
         if not df_u_actual.empty:
-            lista_usuarios_borrar = df_u_actual["DNI_Usuario"].astype(str).tolist()
-            usuario_borrar = st.selectbox("Selecciona DNI a eliminar:", [""] + lista_usuarios_borrar)
-            if st.button("Eliminar Usuario"):
-                if usuario_borrar != "":
+            usuario_borrar = st.selectbox("Selecciona DNI:", [""] + df_u_actual["DNI_Usuario"].tolist())
+            if st.button("Eliminar"):
+                if usuario_borrar:
                     db.collection("usuarios").document(usuario_borrar).delete()
-                    st.success("Usuario eliminado de la base de datos.")
                     st.rerun()
-
-        st.write("Usuarios Registrados en el Sistema:")
         st.dataframe(df_u_actual, hide_index=True)
 
-    # --- PESTAÑA VEHÍCULOS ---
     with pestaña_vehiculos:
-        st.subheader("Crear / Editar Vehículo")
-        nuevo_vehiculo = st.text_input("Nombre o Patente del Vehículo (ej: Camioneta F-201):")
-        if st.button("💾 Guardar Vehículo"):
-            if nuevo_vehiculo != "":
+        nuevo_vehiculo = st.text_input("Patente:")
+        if st.button("💾 Guardar"):
+            if nuevo_vehiculo:
                 db.collection("vehiculos").document(nuevo_vehiculo).set({"Vehiculo": nuevo_vehiculo})
-                st.success(f"¡Listo! El vehículo {nuevo_vehiculo} fue agregado/editado en la flota.")
                 st.rerun()
-            else:
-                st.error("Por favor, escribe el nombre del vehículo.")
 
-        st.markdown("---")
-        st.subheader("🗑️ Eliminar Vehículo")
         df_v_actual = obtener_vehiculos()
+        st.subheader("🗑️ Eliminar")
         if not df_v_actual.empty:
-            lista_vehiculos_borrar = df_v_actual["Vehiculo"].tolist()
-            vehiculo_borrar = st.selectbox("Selecciona Vehículo a eliminar:", [""] + lista_vehiculos_borrar)
+            vehiculo_borrar = st.selectbox("Selecciona Vehículo:", [""] + df_v_actual["Vehiculo"].tolist())
             if st.button("Eliminar Vehículo"):
-                if vehiculo_borrar != "":
+                if vehiculo_borrar:
                     db.collection("vehiculos").document(vehiculo_borrar).delete()
-                    st.success("Vehículo eliminado de la flota.")
                     st.rerun()
-
-        st.write("Vehículos en Flota:")
         st.dataframe(df_v_actual, hide_index=True)
