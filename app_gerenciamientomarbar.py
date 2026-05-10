@@ -136,21 +136,26 @@ vehiculo = st.selectbox("Vehículo o equipo a utilizar:", vehiculos_lista)
 
 # --- MAPA INTERACTIVO (CONSULTA) ---
 with st.expander("🗺️ ABRIR MAPA DE YACIMIENTOS Y EQUIPOS", expanded=True):
-    st.write("Identifica tu ubicación y el equipo de destino en el mapa.")
+    st.write("Identifica tu ubicación y el equipo de destino en el mapa para mayor precisión.")
     components.iframe("https://www.google.com/maps/d/u/2/embed?mid=1BPDw99m6vQAC09Kdbw9Onaj5mu-blw4&ehbc=2E312F", height=480)
 
 col1, col2 = st.columns(2)
 with col1:
-    origen = st.text_input("Origen (Tu ubicación en el mapa):")
+    origen = st.text_input("Origen (Tu ubicación actual):", placeholder="Ej: Añelo")
 with col2:
-    # Usamos los vehículos cargados como lista de equipos/destinos sugeridos
-    destino = st.selectbox("Destino (Selecciona el Equipo del Mapa):", ["Escribir otro..."] + vehiculos_lista)
-    if destino == "Escribir otro...":
-        destino = st.text_input("Escribe el nombre del Equipo/Pozo/Base:")
+    # CORRECCIÓN DEFINITIVA DE LA SELECCIÓN DE DESTINO
+    destino_seleccion = st.selectbox("Destino (Equipo del mapa):", ["Seleccionar de la flota..."] + vehiculos_lista + ["Escribir manualmente..."])
+    
+    if destino_seleccion == "Escribir manualmente...":
+        destino_final = st.text_input("Escribe el destino exacto:", placeholder="Ingresa el nombre de la locación")
+    elif destino_seleccion == "Seleccionar de la flota...":
+        destino_final = ""
+    else:
+        destino_final = destino_seleccion
 
-if origen and destino:
-    link_m = f"https://www.google.com/maps/dir/?api=1&origin={urllib.parse.quote(origen)}&destination={urllib.parse.quote(destino)}"
-    st.info("💡 [Toca aquí para calcular distancia exacta en Google Maps]("+link_m+")")
+if origen and destino_final:
+    link_m = f"https://www.google.com/maps/dir/?api=1&origin={urllib.parse.quote(origen)}&destination={urllib.parse.quote(destino_final)}"
+    st.info("💡 [Toca aquí para abrir la ruta en Google Maps del celular]("+link_m+")")
 
 duracion = st.text_input("Duración estimada (ej: 2 horas):")
 tipo_salida = st.radio("Tipo de Salida:", ["Planificada", "Urgencia"], index=None)
@@ -206,14 +211,14 @@ else: st.error(f"**{estado_v}** | Riesgo: {nivel_v} | Puntos: {puntaje}")
 
 # --- 5. GUARDADO Y TICKET ---
 if st.button("CONFIRMAR Y GUARDAR VIAJE"):
-    if not (origen and destino and tipo_salida and dist and clima):
-        st.error("⛔ Por favor responde todas las preguntas.")
+    if not (origen and destino_final and tipo_salida and dist and clima):
+        st.error("⛔ Por favor completa el Origen, Destino y todas las selecciones antes de guardar.")
     else:
         nid = obtener_siguiente_id()
         datos = {
             "ID": nid, "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
             "Chofer": chofer, "Sector": sec_elegido, "Cargo": car_elegido,
-            "Vehiculo": vehiculo, "Origen": origen, "Destino": destino,
+            "Vehiculo": vehiculo, "Origen": origen, "Destino": destino_final,
             "Duracion": duracion, "Salida": tipo_salida, "Puntaje": puntaje,
             "Nivel": nivel_v, "Alarma Nocturna": alarma_n, "Estado": estado_v,
             "Aprobacion": "🟢 Aprobado" if color == "green" else "🔴 Pendiente"
@@ -226,7 +231,7 @@ if st.button("CONFIRMAR Y GUARDAR VIAJE"):
                 f"👤 *Chofer:* {chofer}\n"
                 f"🚙 *Vehículo:* {vehiculo}\n"
                 f"📍 *Origen:* {origen}\n"
-                f"🏁 *Destino:* {destino}\n"
+                f"🏁 *Destino:* {destino_final}\n"
                 f"⏱️ *Duración:* {duracion}\n"
                 f"⚠️ *Riesgo:* Nivel {nivel_v} ({puntaje} pts)\n"
                 f"📢 *Estado:* {estado_v}\n\n"
