@@ -20,6 +20,18 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
+# --- EMOJIS CODIFICADOS PARA WHATSAPP (A prueba de errores de rombos negros) ---
+E_ALERTA = "\U0001F6A8"
+E_USER = "\U0001F464"
+E_CAR = "\U0001F699"
+E_PIN = "\U0001F4CD"
+E_FLAG = "\U0001F3C1"
+E_TIME = "\u23F3"
+E_WARN = "\u26A0\uFE0F"
+E_HORN = "\U0001F4E2"
+E_POINT = "\U0001F449"
+E_CHECK = "\u2705"
+
 # --- CONECTORES DE DATOS ---
 def obtener_usuarios():
     usuarios_ref = db.collection("usuarios").stream()
@@ -102,7 +114,7 @@ if st.session_state["usuario_actual"] != "ADMIN":
                 st.rerun()
             
             if st.session_state.get(f"fin_{v['ID']}", False):
-                msj = f"✅ *REPORTE DE LLEGADA*\nEl viaje ID {v['ID']} con destino {v['Destino']} ha sido FINALIZADO correctamente."
+                msj = f"{E_CHECK} *REPORTE DE LLEGADA*\nEl viaje ID {v['ID']} con destino {v['Destino']} ha sido FINALIZADO correctamente."
                 st.markdown(f"### [📲 INFORMAR POR WHATSAPP](https://wa.me/?text={urllib.parse.quote(msj)})")
                 if st.button("Limpiar", key=f"clear_{v['ID']}"):
                     st.session_state[f"fin_{v['ID']}"] = False
@@ -134,28 +146,21 @@ df_v = obtener_vehiculos()
 vehiculos_lista = df_v["Vehiculo"].tolist() if not df_v.empty else ["⚠️ Cargar vehículos"]
 vehiculo = st.selectbox("Vehículo o equipo a utilizar:", vehiculos_lista)
 
-# --- MAPA INTERACTIVO (CONSULTA) ---
+# --- MAPA INTERACTIVO Y DESTINO DIRECTO ---
 with st.expander("🗺️ ABRIR MAPA DE YACIMIENTOS Y EQUIPOS", expanded=True):
-    st.write("Identifica tu ubicación y el equipo de destino en el mapa para mayor precisión.")
+    st.write("Identifica tu ubicación y el equipo en el mapa. **Copia el nombre y pégalo abajo.**")
     components.iframe("https://www.google.com/maps/d/u/2/embed?mid=1BPDw99m6vQAC09Kdbw9Onaj5mu-blw4&ehbc=2E312F", height=480)
 
 col1, col2 = st.columns(2)
 with col1:
     origen = st.text_input("Origen (Tu ubicación actual):", placeholder="Ej: Añelo")
 with col2:
-    # CORRECCIÓN DEFINITIVA DE LA SELECCIÓN DE DESTINO
-    destino_seleccion = st.selectbox("Destino (Equipo del mapa):", ["Seleccionar de la flota..."] + vehiculos_lista + ["Escribir manualmente..."])
-    
-    if destino_seleccion == "Escribir manualmente...":
-        destino_final = st.text_input("Escribe el destino exacto:", placeholder="Ingresa el nombre de la locación")
-    elif destino_seleccion == "Seleccionar de la flota...":
-        destino_final = ""
-    else:
-        destino_final = destino_seleccion
+    # Solución definitiva: Un cuadro directo para pegar lo del mapa sin interrupciones.
+    destino_final = st.text_input("Destino (Pega aquí el equipo del mapa):", placeholder="Ej: F-15 - Los Toldos Este")
 
 if origen and destino_final:
     link_m = f"https://www.google.com/maps/dir/?api=1&origin={urllib.parse.quote(origen)}&destination={urllib.parse.quote(destino_final)}"
-    st.info("💡 [Toca aquí para abrir la ruta en Google Maps del celular]("+link_m+")")
+    st.info("💡 [Toca aquí para calcular la distancia de la ruta en tu celular]("+link_m+")")
 
 duracion = st.text_input("Duración estimada (ej: 2 horas):")
 tipo_salida = st.radio("Tipo de Salida:", ["Planificada", "Urgencia"], index=None)
@@ -225,17 +230,17 @@ if st.button("CONFIRMAR Y GUARDAR VIAJE"):
         }
         if guardar_en_nube(datos):
             st.balloons()
-            # TICKET DETALLADO DE WHATSAPP
+            # TICKET DETALLADO DE WHATSAPP (Con emojis irrompibles)
             tkt = (
-                f"🚨 *NUEVA SOLICITUD DE VIAJE - ID {nid}* 🚨\n\n"
-                f"👤 *Chofer:* {chofer}\n"
-                f"🚙 *Vehículo:* {vehiculo}\n"
-                f"📍 *Origen:* {origen}\n"
-                f"🏁 *Destino:* {destino_final}\n"
-                f"⏱️ *Duración:* {duracion}\n"
-                f"⚠️ *Riesgo:* Nivel {nivel_v} ({puntaje} pts)\n"
-                f"📢 *Estado:* {estado_v}\n\n"
-                f"👉 Por favor, apruebe en el sistema MARBAR."
+                f"{E_ALERTA} *NUEVA SOLICITUD DE VIAJE - ID {nid}* {E_ALERTA}\n\n"
+                f"{E_USER} *Chofer:* {chofer}\n"
+                f"{E_CAR} *Vehículo:* {vehiculo}\n"
+                f"{E_PIN} *Origen:* {origen}\n"
+                f"{E_FLAG} *Destino:* {destino_final}\n"
+                f"{E_TIME} *Duración Est.:* {duracion}\n"
+                f"{E_WARN} *Riesgo:* Nivel {nivel_v} ({puntaje} pts)\n"
+                f"{E_HORN} *Estado:* {estado_v}\n\n"
+                f"{E_POINT} Por favor, apruebe en el sistema MARBAR."
             )
             link_w = f"https://wa.me/?text={urllib.parse.quote(tkt)}"
             st.markdown(f"### [📲 ENVIAR TICKET DE DESPACHO]({link_w})")
