@@ -148,21 +148,18 @@ vehiculo = st.selectbox("Vehículo o equipo a utilizar:", vehiculos_lista)
 
 # --- MAPA INTERACTIVO Y DESTINO DIRECTO ---
 with st.expander("🗺️ ABRIR MAPA DE YACIMIENTOS Y EQUIPOS", expanded=True):
-    st.write("Identifica tu ubicación y el equipo en el mapa. **Copia el nombre y pégalo abajo.**")
+    st.write("1️⃣ Identifica tu equipo en el mapa y **copia el nombre**.")
+    st.write("2️⃣ Usa la **flecha roja de indicaciones** dentro de este mapa para ver la ruta y calcular la distancia.")
     components.iframe("https://www.google.com/maps/d/u/2/embed?mid=1BPDw99m6vQAC09Kdbw9Onaj5mu-blw4&ehbc=2E312F", height=480)
 
 col1, col2 = st.columns(2)
 with col1:
     origen = st.text_input("Origen (Tu ubicación actual):", placeholder="Ej: Añelo")
 with col2:
-    # Solución definitiva: Un cuadro directo para pegar lo del mapa sin interrupciones.
     destino_final = st.text_input("Destino (Pega aquí el equipo del mapa):", placeholder="Ej: F-15 - Los Toldos Este")
 
-if origen and destino_final:
-    link_m = f"https://www.google.com/maps/dir/?api=1&origin={urllib.parse.quote(origen)}&destination={urllib.parse.quote(destino_final)}"
-    st.info("💡 [Toca aquí para calcular la distancia de la ruta en tu celular]("+link_m+")")
-
 duracion = st.text_input("Duración estimada (ej: 2 horas):")
+
 tipo_salida = st.radio("Tipo de Salida:", ["Planificada", "Urgencia"], index=None)
 
 # --- 3. RIESGOS ---
@@ -230,20 +227,20 @@ if st.button("CONFIRMAR Y GUARDAR VIAJE"):
         }
         if guardar_en_nube(datos):
             st.balloons()
-            # TICKET DETALLADO DE WHATSAPP (Con emojis irrompibles)
+            # TICKET DETALLADO DE WHATSAPP (Con códigos universales irrompibles)
             tkt = (
-                f"{E_ALERTA} *NUEVA SOLICITUD DE VIAJE - ID {nid}* {E_ALERTA}\n\n"
-                f"{E_USER} *Chofer:* {chofer}\n"
-                f"{E_CAR} *Vehículo:* {vehiculo}\n"
-                f"{E_PIN} *Origen:* {origen}\n"
-                f"{E_FLAG} *Destino:* {destino_final}\n"
-                f"{E_TIME} *Duración Est.:* {duracion}\n"
-                f"{E_WARN} *Riesgo:* Nivel {nivel_v} ({puntaje} pts)\n"
-                f"{E_HORN} *Estado:* {estado_v}\n\n"
-                f"{E_POINT} Por favor, apruebe en el sistema MARBAR."
+                f"\U0001F534 *NUEVA SOLICITUD DE VIAJE - ID {nid}* \U0001F534\n\n"
+                f"\U0001F464 *Chofer:* {chofer}\n"
+                f"\U0001F69A *Vehículo:* {vehiculo}\n"
+                f"\U0001F4CD *Origen:* {origen}\n"
+                f"\U0001F3C1 *Destino:* {destino_final}\n"
+                f"\u23F3 *Duración:* {duracion}\n"
+                f"\u26A0\uFE0F *Riesgo:* Nivel {nivel_v} ({puntaje} pts)\n"
+                f"\U0001F4CB *Estado:* {estado_v}\n\n"
+                f"\U0001F449 Por favor, apruebe en el sistema MARBAR."
             )
             link_w = f"https://wa.me/?text={urllib.parse.quote(tkt)}"
-            st.markdown(f"### [📲 ENVIAR TICKET DE DESPACHO]({link_w})")
+            st.markdown(f"### [\U0001F4F2 ENVIAR TICKET DE DESPACHO]({link_w})")
 
 # --- 6. PANEL LATERAL ---
 st.sidebar.header("📊 Gestión")
