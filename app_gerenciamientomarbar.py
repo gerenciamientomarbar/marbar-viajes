@@ -299,3 +299,5 @@ if st.session_state["usuario_actual"] == "ADMIN":
         st.dataframe(v_list, hide_index=True)
         el_v = st.selectbox("Borrar Equipo:", [""] + v_list["Vehiculo"].tolist())
         if st.button("Borrar"): db.collection("vehiculos").document(el_v).delete(); st.rerun()
+
+        
