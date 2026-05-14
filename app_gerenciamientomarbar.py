@@ -7,7 +7,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import urllib.parse
 import io
-import os # Importación necesaria para verificar el logo
+import os
 
 # --- CONFIGURACIÓN DE ZONA HORARIA (ARGENTINA UTC-3) ---
 TZ_AR = timezone(timedelta(hours=-3))
@@ -16,23 +16,16 @@ TZ_AR = timezone(timedelta(hours=-3))
 st.set_page_config(layout="wide", page_title="MARBAR - Gestión de Viajes", page_icon="🚛")
 
 # --- DISEÑO DE MARCA (COLORES Y ESTILO) ---
-# Definimos colores corporativos (Azul Profesional y Gris)
-primary_color = "#1E3A8A" # Azul fuerte profesional
-text_color = "#1F2937"    # Gris muy oscuro para texto
+primary_color = "#1E3A8A" 
+text_color = "#1F2937"    
 
-# Inyección de CSS para estilizar la App sin romper funcionalidad
 st.markdown(f"""
 <style>
-    /* Fondo general de la App */
     .stApp {{ background-color: #F3F4F6; }}
-    
-    /* Estilo de Títulos y Subtítulos */
     h1, h2, h3, .stSubheader, [data-testid="stHeader"] {{
         color: {primary_color} !important;
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }}
-    
-    /* Estilo de los Botones Principales */
     .stButton>button {{
         background-color: {primary_color};
         color: white;
@@ -43,24 +36,18 @@ st.markdown(f"""
         transition: all 0.3s ease;
     }}
     .stButton>button:hover {{
-        background-color: #111827; /* Gris casi negro al pasar mouse */
+        background-color: #111827;
         color: white;
         transform: translateY(-2px);
     }}
-    
-    /* Estilo del Panel Lateral (Sidebar) */
     [data-testid="stSidebar"] {{
         background-color: white !important;
         border-right: 1px solid #E5E7EB;
     }}
-    
-    /* Fondo para campos deshabilitados (ej: nombre chofer) */
     input:disabled {{
         background-color: #E5E7EB !important;
         color: {text_color} !important;
     }}
-    
-    /* Estilo para las tarjetas de expanders */
     .streamlit-expanderHeader {{
         background-color: white;
         border-radius: 8px;
@@ -115,7 +102,6 @@ if "paso_actual" not in st.session_state:
     st.session_state["paso_actual"] = "Menu"
 
 if st.session_state["usuario_actual"] == None:
-    # --- LOGO EN LOGIN ---
     col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
     with col_logo2:
         if os.path.exists("logo.png"):
@@ -139,8 +125,7 @@ if st.session_state["usuario_actual"] == None:
             else: st.error("\u274C DNI no registrado.")
     st.stop()
 
-# --- INTERFAZ PRINCIPAL CON IDENTIDAD ---
-# Título principal con emoji de camión
+# --- INTERFAZ PRINCIPAL ---
 st.title("🚛 Gestión Operativa de Viajes")
 st.markdown("---")
 
@@ -150,7 +135,6 @@ st.markdown("---")
 if st.session_state["paso_actual"] == "Menu":
     st.subheader(f"Bienvenido, {st.session_state['nombre_empleado']}")
     
-    # Mostrar viajes activos si es chofer
     if st.session_state["usuario_actual"] != "ADMIN":
         activos = [d.to_dict() for d in db.collection("viajes").where("Chofer", "==", st.session_state["nombre_empleado"]).where("Estado_Viaje", "==", "En viaje").stream()]
         if activos:
@@ -191,7 +175,10 @@ elif st.session_state["paso_actual"] == "Test_Chofer":
         st.session_state["paso_actual"] = "Menu"
         st.rerun()
     if col2.button("Siguiente Paso ➡️"):
-        if t1 == "Sí" and t2 == "No" and t3 == "No":
+        # VALIDACIÓN ANTI-VACÍOS PARA EL TEST
+        if t1 is None or t2 is None or t3 is None:
+            st.error("⛔ Debes responder todas las preguntas antes de continuar.")
+        elif t1 == "Sí" and t2 == "No" and t3 == "No":
             st.session_state["test_chofer"] = "Aprobado"
             st.session_state["paso_actual"] = "Inspeccion_Vehiculo"
             st.rerun()
@@ -235,7 +222,7 @@ elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
         todas_doc = all(v is not None for v in respuestas_doc.values())
         
         if not (todas_eq and todas_doc):
-            st.warning("⚠️ Debes responder todos los puntos con Sí, No o N/A para continuar.")
+            st.error("⛔ ALTO: Debes responder todos los puntos de la inspección con Sí, No o N/A para continuar.")
         else:
             hay_negativas = any(v == "No" for v in respuestas_eq.values()) or any(v == "No" for v in respuestas_doc.values())
             if hay_negativas:
@@ -245,7 +232,7 @@ elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
                 st.session_state["paso_actual"] = "Formulario_Viaje"
                 st.rerun()
 
-# 4. FORMULARIO DE VIAJE (RIESGOS Y PASAJEROS)
+# 4. FORMULARIO DE VIAJE
 elif st.session_state["paso_actual"] == "Formulario_Viaje":
     st.subheader("🛡️ Paso 3: Formulario de Despacho Seguro")
     
@@ -273,34 +260,40 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     col1, col2 = st.columns(2)
     with col1: origen = st.text_input("Origen:")
     with col2: destino_final = st.text_input("Destino:")
-    duracion = st.text_input("Duración estimada:")
+    duracion = st.text_input("Duración estimada (ej: 2 horas):")
     tipo_salida = st.radio("Salida:", ["Planificada", "Urgencia"], index=None)
 
     st.markdown("### 2. Evaluación de Riesgos")
     puntaje = 0
     dist = st.radio("Distancia:", ["< 50km", "< 100km", "< 200km", "> 200km"], index=None)
-    puntaje += {"< 50km":1, "< 100km":2, "< 200km":5, "> 200km":7}.get(dist, 0)
+    puntaje += {"< 50km":1, "< 100km":2, "< 200km":5, "> 200km":7}.get(dist, 0) if dist else 0
+    
     clima = st.selectbox("Clima:", ["Despejado", "Viento", "Lluvia", "Niebla", "Nieve"], index=None)
-    puntaje += {"Despejado":0, "Viento":2, "Lluvia":4, "Niebla":8, "Nieve":9}.get(clima, 0)
+    puntaje += {"Despejado":0, "Viento":2, "Lluvia":4, "Niebla":8, "Nieve":9}.get(clima, 0) if clima else 0
     
     pasajeros = st.radio("Pasajeros:", ["Con pasajeros", "Solo conductor"], index=None)
     nombres_pasajeros = "N/A"
     if pasajeros == "Con pasajeros":
         nombres_pasajeros = st.text_input("👥 Ingrese Nombre y Apellido de los pasajeros:")
-    puntaje += 1 if pasajeros == "Con pasajeros" else 5
+    puntaje += (1 if pasajeros == "Con pasajeros" else 5) if pasajeros else 0
     
     camino = st.radio("Camino:", ["Pavimento", "Mixto", "Tierra"], index=None)
-    puntaje += {"Pavimento":1, "Mixto":2, "Tierra":4}.get(camino, 0)
+    puntaje += {"Pavimento":1, "Mixto":2, "Tierra":4}.get(camino, 0) if camino else 0
+    
     dormio = st.radio("¿Durmió +8hs?", ["Sí", "No"], index=None)
     hs_tot = st.radio("Horas totales:", ["< 12hs", "< 14hs", "< 16hs"], index=None)
-    p_h = {"< 12hs": (1 if dormio=="Sí" else 2), "< 14hs": (3 if dormio=="Sí" else 5), "< 16hs": (6 if dormio=="Sí" else 8)}
-    puntaje += p_h.get(hs_tot, 0)
+    if dormio and hs_tot:
+        p_h = {"< 12hs": (1 if dormio=="Sí" else 2), "< 14hs": (3 if dormio=="Sí" else 5), "< 16hs": (6 if dormio=="Sí" else 8)}
+        puntaje += p_h.get(hs_tot, 0)
+        
     escolta = st.radio("¿Escolta?", ["No", "Sí"], index=None)
-    puntaje += 1 if escolta == "No" else 5
+    puntaje += (1 if escolta == "No" else 5) if escolta else 0
+    
     horario = st.radio("Horario:", ["Diurno", "Nocturno"], index=None)
-    puntaje += 5 if horario == "Nocturno" else 1
+    puntaje += (5 if horario == "Nocturno" else 1) if horario else 0
+    
     com = st.radio("Comunicación:", ["Total", "Tramos sin señal", "Sin señal"], index=None)
-    puntaje += {"Total":1, "Tramos sin señal":3, "Sin señal":5}.get(com, 0)
+    puntaje += {"Total":1, "Tramos sin señal":3, "Sin señal":5}.get(com, 0) if com else 0
 
     nivel_v = 1 if puntaje <= 15 else (2 if puntaje <= 30 else 3)
     color = "green" if niv_aprob >= nivel_v else ("orange" if nivel_v < 3 else "red")
@@ -308,12 +301,9 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
 
     st.markdown("---")
     st.subheader("📋 Resultado del Gerenciamiento")
-    if color == "green":
-        st.success(f"**{estado_v}** | Riesgo: Nivel {nivel_v} | Puntos: {puntaje}")
-    elif color == "orange":
-        st.warning(f"**{estado_v}** | Riesgo: Nivel {nivel_v} | Puntos: {puntaje}")
-    else:
-        st.error(f"**{estado_v}** | Riesgo: Nivel {nivel_v} | Puntos: {puntaje}")
+    if color == "green": st.success(f"**{estado_v}** | Riesgo: Nivel {nivel_v} | Puntos: {puntaje}")
+    elif color == "orange": st.warning(f"**{estado_v}** | Riesgo: Nivel {nivel_v} | Puntos: {puntaje}")
+    else: st.error(f"**{estado_v}** | Riesgo: Nivel {nivel_v} | Puntos: {puntaje}")
     st.markdown("---")
 
     col_btn1, col_btn2 = st.columns(2)
@@ -323,10 +313,28 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             st.rerun()
     with col_btn2:
         if st.button("CONFIRMAR Y GUARDAR VIAJE"):
-            if not (origen and destino_final and tipo_salida and dist and pasajeros):
-                st.error("\u26D4 Completa los campos.")
-            elif pasajeros == "Con pasajeros" and nombres_pasajeros == "":
-                st.error("⚠️ Ingrese los nombres de los pasajeros antes de continuar.")
+            
+            # --- VALIDACIÓN ESTRICTA ANTI-VACÍOS ---
+            campos_llenos = all([
+                origen.strip() != "",
+                destino_final.strip() != "",
+                duracion.strip() != "",
+                tipo_salida is not None,
+                dist is not None,
+                clima is not None,
+                pasajeros is not None,
+                camino is not None,
+                dormio is not None,
+                hs_tot is not None,
+                escolta is not None,
+                horario is not None,
+                com is not None
+            ])
+
+            if not campos_llenos:
+                st.error("⛔ ALTO: Faltan datos. Debes escribir Origen, Destino, Duración y responder TODAS las preguntas de opción múltiple para continuar.")
+            elif pasajeros == "Con pasajeros" and nombres_pasajeros.strip() == "":
+                st.error("⚠️ ALTO: Ingrese los nombres y apellidos de los pasajeros antes de continuar.")
             else:
                 nid = obtener_siguiente_id()
                 hora_actual = datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
@@ -342,8 +350,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                     "Estado_Viaje": "En viaje" if color == "green" else "En espera", "Fecha_Fin": "En curso",
                     "Test_Chofer": st.session_state.get("test_chofer", "No registrado"),
                     "Inspeccion_Vehiculo": st.session_state.get("inspeccion_vehiculo", "No registrado"),
-                    "R_Distancia": dist, "R_Clima": clima, "R_Pasajeros": pasajeros, 
-                    "Detalle_Pasajeros": nombres_pasajeros, 
+                    "R_Distancia": dist, "R_Clima": clima, "R_Pasajeros": pasajeros, "Detalle_Pasajeros": nombres_pasajeros, 
                     "R_Camino": camino, "R_Sueno": dormio, "R_Horas": hs_tot, "R_Escolta": escolta, "R_Com": com
                 }
                 if guardar_en_nube(datos):
@@ -356,17 +363,9 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                         cabecera_wa = f"\U0001F534 *NUEVA SOLICITUD DE VIAJE - ID {nid}* \U0001F534"
                         pie_wa = f"👉 *Por favor, ingrese al sistema MARBAR para APROBAR este viaje.*"
 
-                    tkt = (
-                        f"{cabecera_wa}\n\n"
-                        f"👤 *Chofer:* {chofer}\n"
-                        f"🚚 *Vehículo:* {vehiculo}\n"
-                        f"📍 *Origen:* {origen}\n"
-                        f"🏁 *Destino:* {destino_final}\n"
-                        f"⏱️ *Duración:* {duracion}\n"
-                        f"⚠️ *Riesgo:* Nivel {nivel_v} ({puntaje} pts)\n"
-                        f"📋 *Estado:* {estado_v}\n\n"
-                        f"{pie_wa}"
-                    )
+                    tkt = (f"{cabecera_wa}\n\n👤 *Chofer:* {chofer}\n🚚 *Vehículo:* {vehiculo}\n📍 *Origen:* {origen}\n"
+                           f"🏁 *Destino:* {destino_final}\n⏱️ *Duración:* {duracion}\n⚠️ *Riesgo:* Nivel {nivel_v} ({puntaje} pts)\n"
+                           f"📋 *Estado:* {estado_v}\n\n{pie_wa}")
                     st.markdown(f"### [\U0001F4F2 ENVIAR TICKET A WHATSAPP](https://wa.me/?text={urllib.parse.quote(tkt)})")
                     st.success("Viaje guardado correctamente.")
                     st.session_state["paso_actual"] = "Menu"
@@ -391,12 +390,9 @@ elif st.session_state["paso_actual"] == "Historial":
         st.rerun()
 
 # --- 6. PANEL LATERAL CON LOGO Y AUDITORÍA ---
-# Agregamos el logo al panel lateral
 with st.sidebar:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", use_column_width=True)
-    else:
-        st.write("🚛 **MARBAR**")
+    if os.path.exists("logo.png"): st.image("logo.png", use_column_width=True)
+    else: st.write("🚛 **MARBAR**")
     st.markdown("---")
     st.header("\U0001F4CA Gestión SSA")
 
@@ -420,7 +416,6 @@ try:
         if not ruta.empty: st.sidebar.dataframe(ruta[['Chofer','Destino']], hide_index=True)
         else: st.sidebar.write("\u2705 No hay vehículos en ruta.")
 
-        # HISTORIAL DETALLADO (TXT)
         st.sidebar.markdown("---")
         st.sidebar.subheader("📜 Descargar Ticket Individual")
         lista_ids = df_n["ID"].astype(str).tolist()
@@ -470,7 +465,6 @@ ESTADO FINAL   : {v_data.get('Estado_Viaje')}
             """
             st.sidebar.download_button("📥 Descargar Ticket Completo", reporte, f"Reporte_Viaje_{viaje_sel}.txt", key="btn_txt_sb")
 
-        # EXCEL DE 19 COLUMNAS
         if st.session_state["usuario_actual"] == "ADMIN":
             st.sidebar.markdown("---")
             st.sidebar.subheader("📥 Excel de Auditoría")
@@ -483,7 +477,7 @@ ESTADO FINAL   : {v_data.get('Estado_Viaje')}
 except Exception as e:
     pass
 
-# --- 7. BANDEJA DE APROBACIONES (Siempre visible abajo para Jefes) ---
+# --- 7. BANDEJA DE APROBACIONES ---
 if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia"]:
     st.markdown("---")
     st.title("\U0001F4E5 Bandeja de Aprobaciones")
@@ -515,7 +509,7 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador", "
             else: st.info("\u2705 No tienes pendientes de tu sector.")
     except: pass
 
-# --- 8. ADMINISTRACIÓN (Solo ADMIN) ---
+# --- 8. ADMINISTRACIÓN ---
 if st.session_state["usuario_actual"] == "ADMIN":
     st.markdown("---")
     st.title("\U0001F6E0 Configuración Base de Datos")
@@ -526,18 +520,34 @@ if st.session_state["usuario_actual"] == "ADMIN":
         s = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia"], key="admin_sector")
         r = st.selectbox("Rol:", ["Chofer", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia", "ADMIN"], key="admin_rol")
         if st.button("\U0001F4BE Guardar Usuario", key="btn_gu"):
-            db.collection("usuarios").document(d).set({"DNI_Usuario":d,"Nombre":n,"Rol":r,"Sector":s})
-            st.rerun()
+            if d.strip() != "" and n.strip() != "":
+                db.collection("usuarios").document(d).set({"DNI_Usuario":d,"Nombre":n,"Rol":r,"Sector":s})
+                st.success("Usuario guardado exitosamente.")
+                st.rerun()
+            else:
+                st.error("⚠️ Debes ingresar un DNI y un Nombre válidos.")
         u_list = obtener_usuarios()
         st.dataframe(u_list, hide_index=True)
         elim = st.selectbox("Borrar:", [""] + u_list["DNI_Usuario"].tolist(), key="del_user")
-        if st.button("Eliminar Usuario", key="btn_delu"): db.collection("usuarios").document(elim).delete(); st.rerun()
+        if st.button("Eliminar Usuario", key="btn_delu"): 
+            if elim.strip() != "":
+                db.collection("usuarios").document(elim).delete()
+                st.success("Usuario eliminado.")
+                st.rerun()
     with t2:
         pat = st.text_input("Equipo:", key="admin_equipo")
         if st.button("\U0001F4BE Agregar Equipo", key="btn_gv"):
-            db.collection("vehiculos").document(pat).set({"Vehiculo": pat})
-            st.rerun()
+            if pat.strip() != "":
+                db.collection("vehiculos").document(pat).set({"Vehiculo": pat})
+                st.success("Vehículo guardado exitosamente.")
+                st.rerun()
+            else:
+                st.error("⚠️ Debes ingresar una Patente/Equipo válida.")
         v_list = obtener_vehiculos()
         st.dataframe(v_list, hide_index=True)
         el_v = st.selectbox("Borrar Equipo:", [""] + v_list["Vehiculo"].tolist(), key="del_vehiculo")
-        if st.button("Borrar Vehículo", key="btn_delv"): db.collection("vehiculos").document(el_v).delete(); st.rerun()
+        if st.button("Borrar Vehículo", key="btn_delv"): 
+            if el_v.strip() != "":
+                db.collection("vehiculos").document(el_v).delete()
+                st.success("Vehículo eliminado.")
+                st.rerun()
