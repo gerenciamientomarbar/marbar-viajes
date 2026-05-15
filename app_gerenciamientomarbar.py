@@ -690,7 +690,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
         s = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia"], key="a_s")
         r = st.selectbox("Rol:", ["Chofer", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia", "ADMIN"], key="a_r")
         
-        if st.button("💾 Guardar Usuario"):
+        if st.button("💾 Guardar Usuario", key="btn_guardar_u"):
             if d.strip() and n.strip(): 
                 db.collection("usuarios").document(d).set({"DNI_Usuario":d,"Nombre":n,"Rol":r,"Sector":s})
                 st.success("Usuario Guardado")
@@ -702,14 +702,14 @@ if st.session_state["usuario_actual"] == "ADMIN":
         
         u_list = obtener_usuarios()
         elim = st.selectbox("Borrar Usuario:", [""] + u_list["DNI_Usuario"].tolist(), key="del_u")
-        if st.button("Eliminar"):
+        if st.button("Eliminar Usuario", key="btn_elim_u"):
             if elim.strip():
                 db.collection("usuarios").document(elim).delete()
                 st.rerun()
                 
     with t2:
         p = st.text_input("Equipo:", key="a_p")
-        if st.button("💾 Agregar Equipo"):
+        if st.button("💾 Agregar Equipo", key="btn_guardar_v"):
             if p.strip(): 
                 db.collection("vehiculos").document(p).set({"Vehiculo": p})
                 st.success("Vehículo Guardado")
@@ -721,7 +721,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
         st.dataframe(v_list, hide_index=True)
         
         el_v = st.selectbox("Borrar Vehículo:", [""] + v_list["Vehiculo"].tolist(), key="del_v")
-        if st.button("Eliminar"):
+        if st.button("Eliminar Vehículo", key="btn_elim_v"):
             if el_v.strip():
                 db.collection("vehiculos").document(el_v).delete()
                 st.rerun()
