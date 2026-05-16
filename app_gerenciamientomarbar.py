@@ -9,6 +9,8 @@ import urllib.parse
 import io
 import os
 import requests
+import random
+import string
 
 # --- CONFIGURACIÓN DE SEGURIDAD DEL IDP ---
 # Coloca aquí la Clave de API web que obtuviste de Firebase
@@ -449,7 +451,16 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     with col2: 
         destino_txt = st.text_input("Destino:")
         
-    duracion_txt = st.text_input("Duración Estimada:")
+    st.write("Duración Estimada del Trayecto:")
+    col_dur_h, col_dur_m = st.columns(2)
+    with col_dur_h:
+        dur_horas = st.number_input("Horas (HH):", min_value=0, max_value=72, value=1, step=1)
+    with col_dur_m:
+        dur_minutos = st.number_input("Minutos (MM):", min_value=0, max_value=59, value=0, step=1)
+    
+    # Formateo estricto exigido
+    duracion_txt = f"{dur_horas:02d}:{dur_minutos:02d} Hs"
+    
     salida_tipo = st.radio("Salida:", ["Planificada", "Urgencia"], index=None)
 
     st.markdown("### 2. Parámetros de Riesgo")
@@ -552,10 +563,12 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             
     with col_btn2:
         if st.button("CONFIRMAR VIAJE"):
+            duracion_valida = (dur_horas > 0 or dur_minutos > 0)
+            
             campos_ok = all([
                 origen_txt.strip() != "", 
                 destino_txt.strip() != "", 
-                duracion_txt.strip() != "", 
+                duracion_valida,
                 vehiculo_sel != "⚠️ Cargar flota en Admin", 
                 salida_tipo is not None, 
                 v_distancia is not None, 
@@ -570,7 +583,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             ])
             
             if not campos_ok: 
-                st.error("⛔ Faltan datos por responder.")
+                st.error("⛔ Faltan datos por responder o la duración del viaje es 00:00 Hs.")
             elif v_pasajeros == "Con pasajeros" and pasajeros_detalle.strip() == "": 
                 st.error("⚠️ Ingrese nombres de pasajeros.")
             else:
@@ -757,7 +770,6 @@ try:
             st.sidebar.markdown("---")
             st.sidebar.subheader("📊 Consola Excel")
             
-            # --- INCORPORACIÓN DE LA COLUMNA REGIONAL EN EL EXCEL ---
             cols = [
                 'ID', 'Regional', 'Fecha', 'Chofer', 'Sector', 'Cargo', 'Vehiculo', 'Duracion', 
                 'Salida', 'Alarma Nocturna', 'Origen', 'Destino', 'Estado', 'Puntaje', 
@@ -815,34 +827,39 @@ if st.session_state["usuario_actual"] == "ADMIN":
     t1, t2 = st.tabs(["👥 Usuarios", "🚘 Flota"])
     
     with t1:
+        st.info("💡 Al crear un usuario, el sistema generará una clave aleatoria y enviará un correo automático para que el empleado configure su contraseña definitiva.")
         adm_email = st.text_input("Correo Electrónico:").strip()
-        adm_password = st.text_input("Contraseña:", type="password").strip()
-        st.caption("🔴 Firebase exige mínimo 6 caracteres para crear contraseñas.")
         adm_nombre = st.text_input("Nombre y Apellido Real:").strip()
         adm_dni = st.text_input("DNI:").strip()
         adm_regional = st.text_input("Regional a la que pertenece (Ej: Neuquén, Río Negro):").strip()
         adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia"])
         adm_rol = st.selectbox("Rol:", ["Chofer", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia", "ADMIN"])
         
-        if st.button("💾 Crear Usuario"):
-            if adm_email != "" and adm_password != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
-                if len(adm_password) < 6:
-                    st.error("⚠️ La contraseña debe tener al menos 6 caracteres.")
-                else:
-                    try:
-                        auth.create_user(email=adm_email, password=adm_password)
-                        db.collection("usuarios").document(adm_dni).set({
-                            "DNI_Usuario": adm_dni, 
-                            "Nombre": adm_nombre, 
-                            "Email": adm_email, 
-                            "Regional": adm_regional,
-                            "Rol": adm_rol, 
-                            "Sector": adm_sector
-                        })
-                        st.success("Usuario creado con éxito.")
-                        st.rerun()
-                    except Exception as e: 
-                        st.error(f"Error de Firebase: {e}")
+        if st.button("💾 Crear Usuario y Enviar Acceso"):
+            if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
+                
+                # --- GENERACIÓN DE CONTRASEÑA SEGURA TEMPORAL ---
+                caracteres_seguros = string.ascii_letters + string.digits + "!@#$%"
+                password_temporal = "".join(random.choice(caracteres_seguros) for i in range(12))
+                
+                try:
+                    auth.create_user(email=adm_email, password=password_temporal)
+                    db.collection("usuarios").document(adm_dni).set({
+                        "DNI_Usuario": adm_dni, 
+                        "Nombre": adm_nombre, 
+                        "Email": adm_email, 
+                        "Regional": adm_regional,
+                        "Rol": adm_rol, 
+                        "Sector": adm_sector
+                    })
+                    
+                    # --- DISPARO AUTOMÁTICO DE MAIL PARA RESETEO DE CLAVE ---
+                    enviar_correo_recuperacion(adm_email)
+                    
+                    st.success(f"✅ ¡Usuario creado con éxito! Se ha enviado un correo oficial a {adm_email} para que configure su contraseña de forma privada.")
+                    st.rerun()
+                except Exception as e: 
+                    st.error(f"Error de Firebase: {e}")
             else: 
                 st.error("Complete todos los campos de texto, incluyendo la Regional.")
                 
