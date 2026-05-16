@@ -14,6 +14,11 @@ import requests
 # Coloca aquí la Clave de API web que obtuviste de Firebase
 API_KEY_FIREBASE = "AIzaSyAHE35ma-FT5xy1uvacwX2g_CtLbmyCWrs" 
 
+# --- CONFIGURACIÓN DE LA BASE DE DATOS CENTRAL ---
+# Apuntamos a la colección limpia para iniciar Producción.
+# Los registros históricos quedan a salvo en "viajes"
+COLECCION_VIAJES = "viajes_produccion"
+
 # --- CONFIGURACIÓN DE ZONA HORARIA (ARGENTINA UTC-3) ---
 TZ_AR = timezone(timedelta(hours=-3))
 
@@ -125,7 +130,7 @@ def obtener_vehiculos():
 
 def obtener_siguiente_id():
     try:
-        viajes_ref = db.collection("viajes").order_by("ID", direction=firestore.Query.DESCENDING).limit(1).get()
+        viajes_ref = db.collection(COLECCION_VIAJES).order_by("ID", direction=firestore.Query.DESCENDING).limit(1).get()
         if viajes_ref:
             return viajes_ref[0].to_dict().get("ID", 0) + 1
         else:
@@ -135,7 +140,7 @@ def obtener_siguiente_id():
 
 def guardar_en_nube(datos_viaje):
     try:
-        db.collection("viajes").document(str(datos_viaje["ID"])).set(datos_viaje)
+        db.collection(COLECCION_VIAJES).document(str(datos_viaje["ID"])).set(datos_viaje)
         return True
     except Exception:
         return False
@@ -170,6 +175,7 @@ DOCUMENTACIÓN:
 =========================================
       REPORTE INTEGRAL DE RUTA
 =========================================
+REGIONAL       : {v_data.get('Regional', 'N/A')}
 SECTOR         : {v_data.get('Sector', 'N/A')}
 CARGO          : {v_data.get('Cargo', 'N/A')}
 FECHA          : {v_data.get('Fecha')}
@@ -233,6 +239,7 @@ if st.session_state["usuario_actual"] is None:
                     "usuario_actual": "ADMIN", 
                     "nombre_empleado": "Administrador", 
                     "sector_empleado": "Gerencia", 
+                    "regional_empleado": "Sede Central",
                     "email_empleado": e_ing
                 })
                 st.rerun()
@@ -246,6 +253,7 @@ if st.session_state["usuario_actual"] is None:
                             "usuario_actual": p["Rol"], 
                             "nombre_empleado": p["Nombre"], 
                             "sector_empleado": p["Sector"], 
+                            "regional_empleado": p.get("Regional", "No asignada"),
                             "email_empleado": e_ing
                         })
                         st.rerun()
@@ -271,7 +279,7 @@ if st.session_state["usuario_actual"] is None:
 if st.session_state["paso_actual"] == "Menu":
     st.subheader(f"Panel Operativo - Bienvenido, {st.session_state['nombre_empleado']}")
     
-    # --- NUEVO: AVISO WHATSAPP DE LLEGADA A DESTINO ---
+    # --- AVISO WHATSAPP DE LLEGADA A DESTINO ---
     if "alerta_llegada" in st.session_state:
         v_llegada = st.session_state["alerta_llegada"]
         msg_llegada_wa = f"✅ *AVISO DE LLEGADA MARBAR*\n\n🔹 *Conductor:* {st.session_state['nombre_empleado']}\n🔹 *Viaje ID:* {v_llegada['id']}\n🔹 *Destino:* {v_llegada['destino']}\n\n👉 *Llegué bien a destino sin novedades.*"
@@ -286,7 +294,7 @@ if st.session_state["paso_actual"] == "Menu":
         st.markdown("---")
     
     if st.session_state["usuario_actual"] != "ADMIN":
-        viajes_activos = db.collection("viajes").where("Chofer", "==", st.session_state["nombre_empleado"]).where("Estado_Viaje", "==", "En viaje").stream()
+        viajes_activos = db.collection(COLECCION_VIAJES).where("Chofer", "==", st.session_state["nombre_empleado"]).where("Estado_Viaje", "==", "En viaje").stream()
         lista_activos = []
         for d in viajes_activos:
             lista_activos.append(d.to_dict())
@@ -297,11 +305,10 @@ if st.session_state["paso_actual"] == "Menu":
                 col_info, col_accion = st.columns([3, 1])
                 col_info.write(f"**ID {v['ID']}** | Destino: {v['Destino']}")
                 if col_accion.button(f"🏁 Llegué a destino", key=f"menu_fin_{v['ID']}"):
-                    db.collection("viajes").document(str(v['ID'])).update({
+                    db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
                         "Estado_Viaje": "Finalizado", 
                         "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                     })
-                    # Guardamos los datos para mostrar el enlace de WA y recargamos
                     st.session_state["alerta_llegada"] = {"id": v['ID'], "destino": v['Destino']}
                     st.rerun()
 
@@ -411,6 +418,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     sector_usuario = st.session_state["sector_empleado"]
     rol_usuario = st.session_state["usuario_actual"]
     nombre_chofer = st.session_state["nombre_empleado"]
+    regional_usuario = st.session_state.get("regional_empleado", "No asignada")
     
     mapa_autoridad = {
         "Chofer": 0, 
@@ -422,7 +430,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     nivel_aprobacion_usuario = mapa_autoridad.get(rol_usuario, 0)
     
     st.markdown("### 1. Datos Generales")
-    st.info(f"👤 **Conductor:** {nombre_chofer} | **Sector:** {sector_usuario} | **Perfil:** {rol_usuario}")
+    st.info(f"👤 **Conductor:** {nombre_chofer} | **Regional:** {regional_usuario} | **Sector:** {sector_usuario}")
 
     df_flota = obtener_vehiculos()
     if not df_flota.empty:
@@ -586,6 +594,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                 
                 datos = {
                     "ID": nuevo_id, 
+                    "Regional": regional_usuario,
                     "Fecha": hora_str, 
                     "Chofer": nombre_chofer, 
                     "Sector": sector_usuario, 
@@ -647,7 +656,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
 # 5. HISTORIAL
 elif st.session_state["paso_actual"] == "Historial":
     st.subheader("📜 Historial")
-    viajes_historicos = db.collection("viajes").stream()
+    viajes_historicos = db.collection(COLECCION_VIAJES).stream()
     lista_historica = []
     for doc in viajes_historicos:
         lista_historica.append(doc.to_dict())
@@ -675,7 +684,6 @@ elif st.session_state["paso_actual"] == "Historial":
                 id_ext = v_sel.split(" - ")[0]
                 d_v = df_h[df_h["ID"].astype(str) == id_ext].iloc[0]
                 
-                # --- USO DE LA FUNCIÓN DE TICKET PROFESIONAL ---
                 reporte_estructurado = generar_ticket_txt(d_v)
                 st.download_button("📥 Descargar TXT", reporte_estructurado, f"MARBAR_Viaje_{id_ext}.txt")
                 
@@ -699,7 +707,7 @@ with st.sidebar:
             st.rerun()
 
 try:
-    viajes_sidebar = db.collection("viajes").stream()
+    viajes_sidebar = db.collection(COLECCION_VIAJES).stream()
     lista_sidebar = []
     for d in viajes_sidebar:
         lista_sidebar.append(d.to_dict())
@@ -742,7 +750,6 @@ try:
             id_sb = v_sb.split(" - ")[0]
             d_sb = df_sb[df_sb["ID"].astype(str) == id_sb].iloc[0]
             
-            # --- USO DE LA FUNCIÓN DE TICKET PROFESIONAL ---
             reporte_sb_txt = generar_ticket_txt(d_sb)
             st.sidebar.download_button("📥 Descargar Ficha", reporte_sb_txt, f"Ficha_{id_sb}.txt", key="btn_sb_txt")
 
@@ -750,8 +757,9 @@ try:
             st.sidebar.markdown("---")
             st.sidebar.subheader("📊 Consola Excel")
             
+            # --- INCORPORACIÓN DE LA COLUMNA REGIONAL EN EL EXCEL ---
             cols = [
-                'ID', 'Fecha', 'Chofer', 'Sector', 'Cargo', 'Vehiculo', 'Duracion', 
+                'ID', 'Regional', 'Fecha', 'Chofer', 'Sector', 'Cargo', 'Vehiculo', 'Duracion', 
                 'Salida', 'Alarma Nocturna', 'Origen', 'Destino', 'Estado', 'Puntaje', 
                 'Nivel', 'Aprobacion', 'Aprobador', 'Fecha_Aprobacion', 'Estado_Viaje', 'Fecha_Fin'
             ]
@@ -777,7 +785,7 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador", "
     st.title("📥 Bandeja de Validaciones")
     
     try:
-        solicitudes_pendientes = db.collection("viajes").where("Aprobacion", "==", "🔴 Pendiente").stream()
+        solicitudes_pendientes = db.collection(COLECCION_VIAJES).where("Aprobacion", "==", "🔴 Pendiente").stream()
         p_list = []
         for doc in solicitudes_pendientes:
             p_list.append(doc.to_dict())
@@ -787,7 +795,7 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador", "
                 with st.expander(f"🚨 ID: {v_p['ID']} | Conductor: {v_p['Chofer']}"):
                     st.write(f"**Ruta:** {v_p['Origen']} -> {v_p['Destino']} ({v_p['Puntaje']} pts)")
                     if st.button(f"✍️ Aprobar {v_p['ID']}", key=f"btn_ap_{v_p['ID']}"):
-                        db.collection("viajes").document(str(v_p['ID'])).update({
+                        db.collection(COLECCION_VIAJES).document(str(v_p['ID'])).update({
                             "Aprobacion": "🟢 Aprobado", 
                             "Aprobador": st.session_state["nombre_empleado"], 
                             "Fecha_Aprobacion": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S"), 
@@ -812,11 +820,12 @@ if st.session_state["usuario_actual"] == "ADMIN":
         st.caption("🔴 Firebase exige mínimo 6 caracteres para crear contraseñas.")
         adm_nombre = st.text_input("Nombre y Apellido Real:").strip()
         adm_dni = st.text_input("DNI:").strip()
+        adm_regional = st.text_input("Regional a la que pertenece (Ej: Neuquén, Río Negro):").strip()
         adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia"])
         adm_rol = st.selectbox("Rol:", ["Chofer", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia", "ADMIN"])
         
         if st.button("💾 Crear Usuario"):
-            if adm_email != "" and adm_password != "" and adm_nombre != "" and adm_dni != "":
+            if adm_email != "" and adm_password != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
                 if len(adm_password) < 6:
                     st.error("⚠️ La contraseña debe tener al menos 6 caracteres.")
                 else:
@@ -826,6 +835,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
                             "DNI_Usuario": adm_dni, 
                             "Nombre": adm_nombre, 
                             "Email": adm_email, 
+                            "Regional": adm_regional,
                             "Rol": adm_rol, 
                             "Sector": adm_sector
                         })
@@ -834,7 +844,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     except Exception as e: 
                         st.error(f"Error de Firebase: {e}")
             else: 
-                st.error("Complete todos los campos de texto.")
+                st.error("Complete todos los campos de texto, incluyendo la Regional.")
                 
         df_u = obtener_usuarios()
         if not df_u.empty:
