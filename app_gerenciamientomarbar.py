@@ -11,6 +11,8 @@ import os
 import requests
 import random
 import string
+from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.utils import get_column_letter
 
 # --- CONFIGURACIÓN DE SEGURIDAD DEL IDP ---
 # Coloca aquí la Clave de API web que obtuviste de Firebase
@@ -146,6 +148,27 @@ def guardar_en_nube(datos_viaje):
         return True
     except Exception:
         return False
+
+def calcular_duracion_real(fecha_inicio, fecha_fin):
+    """Calcula la diferencia exacta de tiempo entre la salida y la llegada"""
+    if fecha_fin in ["En curso", "Pendiente", "N/A", "", None]:
+        return "No finalizado"
+    
+    try:
+        formato = "%d/%m/%Y %H:%M:%S"
+        inicio = datetime.strptime(fecha_inicio, formato)
+        fin = datetime.strptime(fecha_fin, formato)
+        diferencia = fin - inicio
+        segundos = int(diferencia.total_seconds())
+        
+        if segundos < 0:
+            return "Error de fechas"
+            
+        horas, resto = divmod(segundos, 3600)
+        minutos, _ = divmod(resto, 60)
+        return f"{horas:02d}:{minutos:02d} Hs"
+    except Exception:
+        return "Error de cálculo"
 
 def generar_ticket_txt(v_data):
     """Genera el reporte TXT con el formato profesional corporativo"""
@@ -453,13 +476,11 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
         
     st.write("Duración Estimada del Trayecto:")
     col_dur_h, col_dur_m = st.columns(2)
-    with col_dur_h:
-        dur_horas = st.number_input("Horas (HH):", min_value=0, max_value=72, value=1, step=1)
-    with col_dur_m:
-        dur_minutos = st.number_input("Minutos (MM):", min_value=0, max_value=59, value=0, step=1)
     
-    # Formateo estricto exigido
-    duracion_txt = f"{dur_horas:02d}:{dur_minutos:02d} Hs"
+    with col_dur_h:
+        dur_horas = st.number_input("Horas (HH):", min_value=0, max_value=72, value=None, step=1)
+    with col_dur_m:
+        dur_minutos = st.number_input("Minutos (MM):", min_value=0, max_value=59, value=None, step=1)
     
     salida_tipo = st.radio("Salida:", ["Planificada", "Urgencia"], index=None)
 
@@ -563,7 +584,11 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             
     with col_btn2:
         if st.button("CONFIRMAR VIAJE"):
-            duracion_valida = (dur_horas > 0 or dur_minutos > 0)
+            
+            duracion_valida = False
+            if dur_horas is not None and dur_minutos is not None:
+                if dur_horas > 0 or dur_minutos > 0:
+                    duracion_valida = True
             
             campos_ok = all([
                 origen_txt.strip() != "", 
@@ -583,10 +608,12 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             ])
             
             if not campos_ok: 
-                st.error("⛔ Faltan datos por responder o la duración del viaje es 00:00 Hs.")
+                st.error("⛔ Faltan datos por responder o la duración de viaje no fue completada.")
             elif v_pasajeros == "Con pasajeros" and pasajeros_detalle.strip() == "": 
                 st.error("⚠️ Ingrese nombres de pasajeros.")
             else:
+                duracion_final_txt = f"{int(dur_horas):02d}:{int(dur_minutos):02d} Hs"
+                
                 nuevo_id = obtener_siguiente_id()
                 hora_str = datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                 
@@ -613,7 +640,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                     "Sector": sector_usuario, 
                     "Cargo": rol_usuario, 
                     "Vehiculo": vehiculo_sel, 
-                    "Duracion": duracion_txt, 
+                    "Duracion": duracion_final_txt, 
                     "Salida": salida_tipo, 
                     "Alarma Nocturna": alarma_noche, 
                     "Origen": origen_txt, 
@@ -657,7 +684,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                         f"🔹 Vehículo: {vehiculo_sel}\n"
                         f"🔹 Origen: {origen_txt}\n"
                         f"🔹 Destino: {destino_txt}\n"
-                        f"🔹 Duración: {duracion_txt}\n"
+                        f"🔹 Duración: {duracion_final_txt}\n"
                         f"🔹 Riesgo: Nivel {nivel_riesgo_calculado}\n\n"
                         f"{pie_wa}"
                     )
@@ -780,11 +807,34 @@ try:
                 if c not in df_sb.columns: 
                     df_sb[c] = "N/A"
                     
-            df_ex = df_sb[cols].sort_values(by="ID", ascending=False)
+            df_ex = df_sb[cols].sort_values(by="ID", ascending=False).copy()
             
+            # --- CÁLCULO DE DURACIÓN REAL EN EXCEL ---
+            df_ex['Duracion_Real_Viaje'] = df_ex.apply(lambda r: calcular_duracion_real(r.get('Fecha', ''), r.get('Fecha_Fin', '')), axis=1)
+            
+            # --- CREACIÓN DEL EXCEL EN FORMATO TABLA (CON DISEÑO OPENPYXL) ---
             bx = io.BytesIO()
             with pd.ExcelWriter(bx, engine='openpyxl') as wr: 
-                df_ex.to_excel(wr, index=False)
+                df_ex.to_excel(wr, index=False, sheet_name='Auditoria_Viajes')
+                worksheet = wr.sheets['Auditoria_Viajes']
+                
+                filas = worksheet.max_row
+                columnas = worksheet.max_column
+                
+                if filas > 1:
+                    letra_final = get_column_letter(columnas)
+                    rango_tabla = f"A1:{letra_final}{filas}"
+                    
+                    tabla = Table(displayName="TablaAuditoria", ref=rango_tabla)
+                    estilo = TableStyleInfo(
+                        name="TableStyleMedium9", 
+                        showFirstColumn=False, 
+                        showLastColumn=False, 
+                        showRowStripes=True, 
+                        showColumnStripes=False
+                    )
+                    tabla.tableStyleInfo = estilo
+                    worksheet.add_table(tabla)
                 
             st.sidebar.download_button("📥 Auditoría (Excel)", bx.getvalue(), f"Auditoria_MARBAR_{hoy.replace('/','-')}.xlsx", key="btn_ex")
             
@@ -827,7 +877,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
     t1, t2 = st.tabs(["👥 Usuarios", "🚘 Flota"])
     
     with t1:
-        st.info("💡 Al crear un usuario, el sistema generará una clave aleatoria y enviará un correo automático para que el empleado configure su contraseña definitiva.")
+        st.info("💡 Al crear un usuario, el sistema le enviará un correo automático de Firebase para que configure su propia contraseña personal.")
         adm_email = st.text_input("Correo Electrónico:").strip()
         adm_nombre = st.text_input("Nombre y Apellido Real:").strip()
         adm_dni = st.text_input("DNI:").strip()
@@ -838,9 +888,8 @@ if st.session_state["usuario_actual"] == "ADMIN":
         if st.button("💾 Crear Usuario y Enviar Acceso"):
             if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
                 
-                # --- GENERACIÓN DE CONTRASEÑA SEGURA TEMPORAL ---
                 caracteres_seguros = string.ascii_letters + string.digits + "!@#$%"
-                password_temporal = "".join(random.choice(caracteres_seguros) for i in range(12))
+                password_temporal = "".join(random.choice(caracteres_seguros) for i in range(16))
                 
                 try:
                     auth.create_user(email=adm_email, password=password_temporal)
@@ -853,7 +902,6 @@ if st.session_state["usuario_actual"] == "ADMIN":
                         "Sector": adm_sector
                     })
                     
-                    # --- DISPARO AUTOMÁTICO DE MAIL PARA RESETEO DE CLAVE ---
                     enviar_correo_recuperacion(adm_email)
                     
                     st.success(f"✅ ¡Usuario creado con éxito! Se ha enviado un correo oficial a {adm_email} para que configure su contraseña de forma privada.")
@@ -867,9 +915,11 @@ if st.session_state["usuario_actual"] == "ADMIN":
         if not df_u.empty:
             st.dataframe(df_u, hide_index=True)
             
+            # --- FILTRO DE SEGURIDAD: PROTEGER AL ADMIN DE SER ELIMINADO ---
             lista_borrar_u = [""]
-            for dni in df_u["DNI_Usuario"].tolist():
-                lista_borrar_u.append(dni)
+            for index, row in df_u.iterrows():
+                if row.get("Rol") != "ADMIN" and row.get("Email") != "admin@marbar.com":
+                    lista_borrar_u.append(row["DNI_Usuario"])
                 
             elim_u = st.selectbox("Borrar Perfil (DNI):", lista_borrar_u)
             
