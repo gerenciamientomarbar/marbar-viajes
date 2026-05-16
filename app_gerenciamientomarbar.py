@@ -91,6 +91,8 @@ def login_usuario(email, password):
     if res.status_code == 200:
         return res.json()
     else:
+        # ESTA LÍNEA ES LA MAGIA DEL DEBUG
+        st.error(f"🔍 DIAGNÓSTICO DE GOOGLE: {res.text}") 
         return None
 
 def enviar_correo_recuperacion(email):
