@@ -12,7 +12,7 @@ import requests
 
 # --- CONFIGURACIÓN DE SEGURIDAD DEL IDP ---
 # Coloca aquí la Clave de API web que obtuviste de Firebase
-API_KEY_FIREBASE = "AIzaSyAHE35ma-FT5xy1uvacwX2g_CtLbmyCWrsv" 
+API_KEY_FIREBASE = "AIzaSyAHE35ma-FT5xy1uvacwX2g_CtLbmyCWrs" 
 
 # --- CONFIGURACIÓN DE ZONA HORARIA (ARGENTINA UTC-3) ---
 TZ_AR = timezone(timedelta(hours=-3))
