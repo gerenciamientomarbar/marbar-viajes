@@ -91,8 +91,6 @@ def login_usuario(email, password):
     if res.status_code == 200:
         return res.json()
     else:
-        # ESTA LÍNEA ES LA MAGIA DEL DEBUG
-        st.error(f"🔍 DIAGNÓSTICO DE GOOGLE: {res.text}") 
         return None
 
 def enviar_correo_recuperacion(email):
@@ -273,6 +271,20 @@ if st.session_state["usuario_actual"] is None:
 if st.session_state["paso_actual"] == "Menu":
     st.subheader(f"Panel Operativo - Bienvenido, {st.session_state['nombre_empleado']}")
     
+    # --- NUEVO: AVISO WHATSAPP DE LLEGADA A DESTINO ---
+    if "alerta_llegada" in st.session_state:
+        v_llegada = st.session_state["alerta_llegada"]
+        msg_llegada_wa = f"✅ *AVISO DE LLEGADA MARBAR*\n\n🔹 *Conductor:* {st.session_state['nombre_empleado']}\n🔹 *Viaje ID:* {v_llegada['id']}\n🔹 *Destino:* {v_llegada['destino']}\n\n👉 *Llegué bien a destino sin novedades.*"
+        link_llegada_wa = f"https://wa.me/?text={urllib.parse.quote(msg_llegada_wa)}"
+        
+        st.success("El viaje se cerró correctamente en el sistema operativo.")
+        st.markdown(f"### [📱 ENVIAR AVISO DE LLEGADA POR WHATSAPP]({link_llegada_wa})")
+        
+        if st.button("Ocultar Aviso"):
+            del st.session_state["alerta_llegada"]
+            st.rerun()
+        st.markdown("---")
+    
     if st.session_state["usuario_actual"] != "ADMIN":
         viajes_activos = db.collection("viajes").where("Chofer", "==", st.session_state["nombre_empleado"]).where("Estado_Viaje", "==", "En viaje").stream()
         lista_activos = []
@@ -289,7 +301,8 @@ if st.session_state["paso_actual"] == "Menu":
                         "Estado_Viaje": "Finalizado", 
                         "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                     })
-                    st.success("Viaje cerrado.")
+                    # Guardamos los datos para mostrar el enlace de WA y recargamos
+                    st.session_state["alerta_llegada"] = {"id": v['ID'], "destino": v['Destino']}
                     st.rerun()
 
     st.markdown("---")
