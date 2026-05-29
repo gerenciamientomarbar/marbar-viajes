@@ -313,8 +313,22 @@ if st.session_state["paso_actual"] == "Menu":
         st.success("El viaje se cerró correctamente en el sistema operativo.")
         st.markdown(f"### [📱 ENVIAR AVISO DE LLEGADA POR WHATSAPP]({link_llegada_wa})")
         
-        if st.button("Ocultar Aviso"):
+        if st.button("Ocultar Aviso", key="ocultar_llegada"):
             del st.session_state["alerta_llegada"]
+            st.rerun()
+        st.markdown("---")
+        
+    # --- AVISO WHATSAPP DE CANCELACIÓN DE VIAJE ---
+    if "alerta_cancelacion" in st.session_state:
+        v_canc = st.session_state["alerta_cancelacion"]
+        msg_canc_wa = f"❌ *VIAJE CANCELADO - MARBAR*\n\n🔹 *Conductor:* {st.session_state['nombre_empleado']}\n🔹 *Viaje ID:* {v_canc['id']}\n🔹 *Destino:* {v_canc['destino']}\n\n👉 *El viaje ha sido suspendido y cerrado en el sistema.*"
+        link_canc_wa = f"https://wa.me/?text={urllib.parse.quote(msg_canc_wa)}"
+        
+        st.warning("El viaje fue cancelado y retirado de la ruta activa.")
+        st.markdown(f"### [📱 ENVIAR AVISO DE CANCELACIÓN POR WHATSAPP]({link_canc_wa})")
+        
+        if st.button("Ocultar Aviso", key="ocultar_canc"):
+            del st.session_state["alerta_cancelacion"]
             st.rerun()
         st.markdown("---")
     
@@ -327,14 +341,26 @@ if st.session_state["paso_actual"] == "Menu":
         if lista_activos:
             st.info("📍 Tiene un viaje abierto en curso.")
             for v in lista_activos:
-                col_info, col_accion = st.columns([3, 1])
+                # Dividimos en 3 columnas para que entren los dos botones
+                col_info, col_accion, col_canc = st.columns([2, 1, 1])
                 col_info.write(f"**ID {v['ID']}** | Destino: {v['Destino']}")
-                if col_accion.button(f"🏁 Llegué a destino", key=f"menu_fin_{v['ID']}"):
+                
+                # BOTÓN 1: LLEGADA
+                if col_accion.button(f"🏁 Llegar", key=f"menu_fin_{v['ID']}"):
                     db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
                         "Estado_Viaje": "Finalizado", 
                         "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                     })
                     st.session_state["alerta_llegada"] = {"id": v['ID'], "destino": v['Destino']}
+                    st.rerun()
+                    
+                # BOTÓN 2: CANCELACIÓN
+                if col_canc.button(f"❌ Cancelar", key=f"menu_canc_{v['ID']}"):
+                    db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
+                        "Estado_Viaje": "Cancelado", 
+                        "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
+                    })
+                    st.session_state["alerta_cancelacion"] = {"id": v['ID'], "destino": v['Destino']}
                     st.rerun()
 
     st.markdown("---")
