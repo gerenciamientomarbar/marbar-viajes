@@ -351,6 +351,7 @@ if st.session_state["paso_actual"] == "Menu":
 
 # 2. TEST DE FATIGA
 elif st.session_state["paso_actual"] == "Test_Chofer":
+    st.warning("⚖️ **DECLARACIÓN JURADA:** La información ingresada en este gerenciamiento reviste carácter de Declaración Jurada. Cualquier omisión o falsedad sobre su estado o el del vehículo constituye una falta grave a las normativas de seguridad (SSA).")
     st.subheader("🛡️ Paso 1: Control de Fatiga")
     
     t1 = st.radio("¿Se siente descansado y en condiciones?", ["Sí", "No"], index=None)
@@ -376,7 +377,8 @@ elif st.session_state["paso_actual"] == "Test_Chofer":
 
 # 3. INSPECCIÓN VEHÍCULO
 elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
-    st.subheader("🚘 Paso 2: Check-list Preventivo")
+    st.warning("⚖️ **DECLARACIÓN JURADA:** La información ingresada en este gerenciamiento reviste carácter de Declaración Jurada. Cualquier omisión o falsedad sobre su estado o el del vehículo constituye una falta grave a las normativas de seguridad (SSA).")
+    st.subheader("🚘 Paso 2: Condiciones del Vehículo")
     
     st.markdown("#### A. Equipamiento")
     eq_items = [
@@ -438,6 +440,7 @@ elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
 
 # 4. FORMULARIO Y RIESGO
 elif st.session_state["paso_actual"] == "Formulario_Viaje":
+    st.warning("⚖️ **DECLARACIÓN JURADA:** La información ingresada en este gerenciamiento reviste carácter de Declaración Jurada. Cualquier omisión o falsedad sobre su estado o el del vehículo constituye una falta grave a las normativas de seguridad (SSA).")
     st.subheader("🛡️ Paso 3: Análisis de Riesgo")
     
     sector_usuario = st.session_state["sector_empleado"]
