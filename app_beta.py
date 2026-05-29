@@ -333,7 +333,8 @@ if st.session_state["paso_actual"] == "Menu":
         st.markdown("---")
     
     if st.session_state["usuario_actual"] != "ADMIN":
-        viajes_activos = db.collection(COLECCION_VIAJES).where("Chofer", "==", st.session_state["nombre_empleado"]).where("Estado_Viaje", "==", "En viaje").stream()
+        # CORRECCIÓN AQUÍ: Usamos "in" para buscar tanto viajes "En viaje" como "En espera"
+        viajes_activos = db.collection(COLECCION_VIAJES).where("Chofer", "==", st.session_state["nombre_empleado"]).where("Estado_Viaje", "in", ["En viaje", "En espera"]).stream()
         lista_activos = []
         for d in viajes_activos:
             lista_activos.append(d.to_dict())
