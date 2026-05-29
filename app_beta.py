@@ -380,35 +380,36 @@ elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
     st.warning("⚖️ **DECLARACIÓN JURADA:** La información ingresada en este gerenciamiento reviste carácter de Declaración Jurada. Cualquier omisión o falsedad sobre su estado o el del vehículo constituye una falta grave a las normativas de seguridad (SSA).")
     st.subheader("🚘 Paso 2: Condiciones del Vehículo")
     
-    st.markdown("#### A. Equipamiento")
+    st.markdown("#### A. Equipamiento y Estado Técnico")
     eq_items = [
-        "1. Cinturón De Seguridad", 
-        "2. Torque En Pernos", 
-        "3. Triángulos x2", 
-        "4. Neumático Auxilio/Cric", 
-        "5. Extintor", 
-        "6. Alarma Retroceso", 
-        "7. Botiquín", 
-        "8. Cadenas/Clavos", 
-        "9. Pala/Supervivencia", 
-        "10. Verificación 360°"
+        "1. Frenos de Servicio en Correcto Funcionamiento",
+        "2. Freno de Estacionamiento en Correcto Funcionamiento",
+        "3. Neumáticos en buen estado (mín. 1,6mm, sin daños ni deformaciones)",
+        "4. Sistema de Dirección y Suspensión íntegro libre de pérdidas de fluidos",
+        "5. Tablero de instrumentos libre de indicadores (luces prendidas)",
+        "6. Cinturones de Seguridad Funcional en todas las plazas",
+        "7. Apoyacabeza en todas las plazas de la unidad",
+        "8. Extintor Vigente, precintado y asegurado correctamente",
+        "9. Balizas Portátiles/Triángulos Reflectivos",
+        "10. Kit de Herramientas para cambio de neumáticos",
+        "11. Rueda de Auxilio Operativa",
+        "12. Airbag Operativo (Verificar ausencia de testigo en tablero)",
+        "13. Sist. ABS Operativo (Verificar ausencia de testigo en tablero)",
+        "14. MVI (GPRS) Operativo",
+        "15. Kit Invernal"
     ]
     respuestas_eq = {}
     for item in eq_items:
         respuestas_eq[item] = st.radio(item, ["Sí", "No", "N/A"], index=None, horizontal=True)
         
     st.markdown("---")
-    st.markdown("#### B. Documentación")
+    st.markdown("#### B. Documentación Obligatoria")
     doc_items = [
-        "1. Tarjeta Propiedad", 
-        "2. Póliza Seguro", 
-        "3. Revisión Técnica", 
-        "4. Licencia", 
-        "5. Manejo Defensivo", 
-        "6. Credencial", 
-        "7. Ingreso Yacimientos", 
-        "8. Permisos Especiales", 
-        "9. Curso 4x4"
+        "1. Licencia de conducir vigente y acorde al vehículo",
+        "2. Cédula Verde/Azul",
+        "3. RTO Libre de observaciones",
+        "4. Seguro del Vehículo",
+        "5. Curso conducción Defensiva Chofer"
     ]
     respuestas_doc = {}
     for item in doc_items:
@@ -430,7 +431,7 @@ elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
             else:
                 hay_negativas = any(v == "No" for v in respuestas_eq.values()) or any(v == "No" for v in respuestas_doc.values())
                 if hay_negativas:
-                    st.error("⛔ Elementos marcados con 'No'. Prohibido el despacho.")
+                    st.error("⛔ Elementos marcados con 'No'. Prohibido el viaje.")
                 else:
                     st.session_state["inspeccion_vehiculo"] = "Aprobada"
                     st.session_state["resp_eq"] = respuestas_eq
