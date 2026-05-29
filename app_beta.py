@@ -339,13 +339,21 @@ if st.session_state["paso_actual"] == "Menu":
             lista_activos.append(d.to_dict())
             
         if lista_activos:
-            st.info("📍 Tiene un viaje abierto en curso.")
+            st.info("📍 Estado de su viaje actual:")
             for v in lista_activos:
-                # Dividimos en 3 columnas para que entren los dos botones
-                col_info, col_accion, col_canc = st.columns([2, 1, 1])
-                col_info.write(f"**ID {v['ID']}** | Destino: {v['Destino']}")
+                # --- VALIDACIÓN DE ESTADO PARA EL CHOFER ---
+                estado_aprobacion = v.get("Aprobacion", "🔴 Pendiente")
                 
-                # BOTÓN 1: LLEGADA
+                if "Aprobado" in estado_aprobacion:
+                    st.success(f"🚀 **VIAJE AUTORIZADO (ID {v['ID']})**\n\nEl supervisor ya firmó digitalmente. Está habilitado para iniciar la marcha hacia **{v['Destino']}** de forma segura.")
+                else:
+                    st.warning(f"⏳ **ESPERANDO APROBACIÓN (ID {v['ID']})**\n\nSu solicitud de viaje hacia **{v['Destino']}** requiere validación de la supervisión. **No mueva la unidad hasta recibir la autorización en este panel.**")
+                
+                # Columnas para los botones de cierre operativos
+                col_info, col_accion, col_canc = st.columns([1, 1, 1])
+                col_info.write(f"**Gestión ID {v['ID']}**")
+                
+                # BOTÓN: LLEGADA
                 if col_accion.button(f"🏁 Llegar", key=f"menu_fin_{v['ID']}"):
                     db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
                         "Estado_Viaje": "Finalizado", 
@@ -354,7 +362,7 @@ if st.session_state["paso_actual"] == "Menu":
                     st.session_state["alerta_llegada"] = {"id": v['ID'], "destino": v['Destino']}
                     st.rerun()
                     
-                # BOTÓN 2: CANCELACIÓN
+                # BOTÓN: CANCELACIÓN
                 if col_canc.button(f"❌ Cancelar", key=f"menu_canc_{v['ID']}"):
                     db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
                         "Estado_Viaje": "Cancelado", 
