@@ -865,7 +865,7 @@ try:
             st.sidebar.write("✅ Ninguna.")
 
         st.sidebar.markdown("---")
-        st.sidebar.subheader("📜 TXT Rápido")
+        st.sidebar.subheader("📜 Ficha Rápida")
         
         df_sb_ord = df_sb.sort_values(by="ID", ascending=False)
         op_sb = [""]
@@ -877,6 +877,16 @@ try:
         if v_sb != "":
             id_sb = v_sb.split(" - ")[0]
             d_sb = df_sb[df_sb["ID"].astype(str) == id_sb].iloc[0]
+            
+            # --- CORRECCIÓN AQUÍ: Llamamos a la nueva función HTML ---
+            reporte_sb_html = generar_ficha_html(d_sb)
+            st.sidebar.download_button(
+                label="📥 Descargar Ficha PDF", 
+                data=reporte_sb_html, 
+                file_name=f"MARBAR_Auditoria_{id_sb}.html", 
+                mime="text/html",
+                key="btn_sb_txt"
+            )
             
             reporte_html = generar_ficha_html(d_v)
             st.download_button("📥 Descargar Ficha PDF", reporte_html, f"MARBAR_Auditoria_{id_ext}.html", mime="text/html")
