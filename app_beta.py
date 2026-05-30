@@ -781,7 +781,12 @@ with st.sidebar:
     st.header("📊 SSA & Logística")
     
     if st.session_state["usuario_actual"]:
-        if st.button("🚪 Cerrar Sesión"): 
+        
+        # --- BOTÓN DE ACTUALIZACIÓN (NO PIERDE LA SESIÓN) ---
+        if st.button("🔄 Actualizar Pantalla", use_container_width=True):
+            st.rerun()
+            
+        if st.button("🚪 Cerrar Sesión", use_container_width=True): 
             st.session_state.clear()
             st.rerun()
 
