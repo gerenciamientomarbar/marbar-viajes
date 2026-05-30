@@ -21,7 +21,7 @@ API_KEY_FIREBASE = "AIzaSyAHE35ma-FT5xy1uvacwX2g_CtLbmyCWrs"
 # --- CONFIGURACIÓN DE LA BASE DE DATOS CENTRAL ---
 # Apuntamos a la colección limpia para iniciar Producción.
 # Los registros históricos quedan a salvo en "viajes"
-COLECCION_VIAJES = "viajes_produccion"
+COLECCION_VIAJES = "viajes"
 
 # --- CONFIGURACIÓN DE ZONA HORARIA (ARGENTINA UTC-3) ---
 TZ_AR = timezone(timedelta(hours=-3))
@@ -29,13 +29,13 @@ TZ_AR = timezone(timedelta(hours=-3))
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
     layout="wide", 
-    page_title="MARBAR - Gestión de Viajes", 
+    page_title="MARBAR - Gestión de Viajes",
     page_icon="🚛"
 )
 
 # --- DISEÑO CORPORATIVO (CSS) ---
-primary_color = "#1E3A8A" 
-text_color = "#1F2937"    
+primary_color = "#1E3A8A"
+text_color = "#1F2937"  
 
 st.markdown(f"""
 <style>
@@ -170,70 +170,107 @@ def calcular_duracion_real(fecha_inicio, fecha_fin):
     except Exception:
         return "Error de cálculo"
 
-def generar_ticket_txt(v_data):
-    """Genera el reporte TXT con el formato profesional corporativo"""
-    chk_eq = v_data.get('Checklist_Eq', {})
-    chk_doc = v_data.get('Checklist_Doc', {})
+def generar_ficha_html(v_data):
+    """Genera la ficha corporativa de auditoría en formato HTML para impresión/PDF"""
     
-    str_eq = ""
+    # Función para ordenar numéricamente los items
+    def ordenar_por_numero(texto):
+        try: return int(texto.split(".")[0])
+        except: return 99
+    
+    # Procesamiento del Equipamiento
+    eq_html = ""
+    chk_eq = v_data.get('Checklist_Eq', {})
     if chk_eq:
-        for k, v in chk_eq.items():
-            str_eq += f"  - {k}: {v}\n"
-    else:
-        str_eq = "  (Sin datos de equipamiento)\n"
-        
-    str_doc = ""
+        for k in sorted(chk_eq.keys(), key=ordenar_por_numero):
+            v = chk_eq[k]
+            color = "#16a34a" if v == "Sí" else ("#dc2626" if v == "No" else "#64748b")
+            eq_html += f'<tr><td style="padding: 4px; border-bottom: 1px solid #f1f5f9; font-size: 9pt;">{k}</td><td style="text-align: right; font-weight: bold; width: 15%; color: {color};">{str(v).upper()}</td></tr>'
+    else: eq_html = "<tr><td colspan='2'>Sin datos</td></tr>"
+
+    # Procesamiento de Documentación
+    doc_html = ""
+    chk_doc = v_data.get('Checklist_Doc', {})
     if chk_doc:
-        for k, v in chk_doc.items():
-            str_doc += f"  - {k}: {v}\n"
-    else:
-        str_doc = "  (Sin datos de documentación)\n"
+        for k in sorted(chk_doc.keys(), key=ordenar_por_numero):
+            v = chk_doc[k]
+            color = "#16a34a" if v == "Sí" else ("#dc2626" if v == "No" else "#64748b")
+            doc_html += f'<tr><td style="padding: 4px; border-bottom: 1px solid #f1f5f9; font-size: 9pt;">{k}</td><td style="text-align: right; font-weight: bold; width: 15%; color: {color};">{str(v).upper()}</td></tr>'
+    else: doc_html = "<tr><td colspan='2'>Sin datos</td></tr>"
 
-    reporte = f"""MARBAR TRIP ID {v_data.get('ID')}
-Conductor: {v_data.get('Chofer')}
-Unidad: {v_data.get('Vehiculo')}
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <title>Ficha MARBAR ID {v_data.get('ID')}</title>
+        <style>
+            @media print {{
+                @page {{ margin: 15mm; }}
+                body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+            }}
+            body {{ font-family: Arial, sans-serif; font-size: 10pt; color: #1e293b; max-width: 800px; margin: 0 auto; padding: 20px; }}
+            h2 {{ color: #1e3a8a; font-size: 12pt; background-color: #f1f5f9; padding: 6px 10px; border-left: 4px solid #e65100; margin-top: 15px; }}
+            .tbl {{ width: 100%; border-collapse: collapse; margin-bottom: 10px; }}
+            .tbl th, .tbl td {{ padding: 6px; text-align: left; border-bottom: 1px solid #e2e8f0; }}
+            .tbl th {{ background-color: #f8fafc; width: 30%; }}
+            .badge {{ background-color: #fff7ed; border: 1px solid #ffedd5; padding: 10px; text-align: center; border-radius: 5px; margin-top: 15px; }}
+            .ddjj {{ font-size: 8pt; color: #64748b; border: 1px dashed #cbd5e1; padding: 10px; background-color: #fafafa; margin-top: 20px; text-align: justify; }}
+        </style>
+    </head>
+    <body onload="window.print()">
+        <table style="width: 100%; border-bottom: 3px solid #1e3a8a; margin-bottom: 15px;">
+            <tr>
+                <td><strong style="color: #1e3a8a; font-size: 16pt;">MARBAR SA</strong><br><span style="color: #475569; font-size: 9pt;">Auditoría de Gerenciamiento de Viaje</span></td>
+                <td style="text-align: right;"><strong style="color: #e65100; font-size: 12pt;">ID #{v_data.get('ID')}</strong><br><span style="color: #475569; font-size: 9pt;">Estado: <b>{str(v_data.get('Estado_Viaje')).upper()}</b></span></td>
+            </tr>
+        </table>
 
-EQUIPAMIENTO:
-{str_eq}
-DOCUMENTACIÓN:
-{str_doc}
-=========================================
-      REPORTE INTEGRAL DE RUTA
-=========================================
-REGIONAL       : {v_data.get('Regional', 'N/A')}
-SECTOR         : {v_data.get('Sector', 'N/A')}
-CARGO          : {v_data.get('Cargo', 'N/A')}
-FECHA          : {v_data.get('Fecha')}
------------------------------------------
-1. RUTA Y TIEMPOS
-ORIGEN         : {v_data.get('Origen')}
-DESTINO        : {v_data.get('Destino')}
-DURACIÓN EST.  : {v_data.get('Duracion')}
-TIPO SALIDA    : {v_data.get('Salida', 'N/A')}
-FECHA CIERRE   : {v_data.get('Fecha_Fin', 'N/A')}
------------------------------------------
-2. PREVENCIÓN PREVIA 
-TEST FATIGA    : {v_data.get('Test_Chofer', 'N/A')}
-INSPECCIÓN V.  : {v_data.get('Inspeccion_Vehiculo', 'N/A')}
------------------------------------------
-3. EVALUACIÓN DE RIESGOS 
-DISTANCIA      : {v_data.get('R_Distancia', 'N/A')}
-CLIMA          : {v_data.get('R_Clima', 'N/A')}
-PASAJEROS      : {v_data.get('R_Pasajeros', 'N/A')} ({v_data.get('Detalle_Pasajeros', 'N/A')})
-CAMINO         : {v_data.get('R_Camino', 'N/A')}
-SUEÑO +8HS     : {v_data.get('R_Sueno', 'N/A')}
-HS TOTALES     : {v_data.get('R_Horas', 'N/A')}
-ESCOLTA        : {v_data.get('R_Escolta', 'N/A')}
-COMUNICACIÓN   : {v_data.get('R_Com', 'N/A')}
------------------------------------------
-4. RESULTADO Y APROBACIÓN
-PUNTAJE TOTAL  : {v_data.get('Puntaje')}
-NIVEL RIESGO   : Nivel {v_data.get('Nivel')}
-APROBADO POR   : {v_data.get('Aprobador', 'N/A')}
-HORA APROB.    : {v_data.get('Fecha_Aprobacion', 'N/A')}
-ESTADO FINAL   : {v_data.get('Estado_Viaje', 'N/A')}
-========================================="""
-    return reporte
+        <h2>1. PERSONAL Y UNIDAD</h2>
+        <table class="tbl">
+            <tr><th>Conductor</th><td>{v_data.get('Chofer')}</td><th>Unidad</th><td>{v_data.get('Vehiculo')}</td></tr>
+            <tr><th>Sector/Cargo</th><td>{v_data.get('Sector')} / {v_data.get('Cargo')}</td><th>Regional</th><td>{v_data.get('Regional')}</td></tr>
+        </table>
+
+        <h2>2. RUTA Y TIEMPOS</h2>
+        <table class="tbl">
+            <tr><th>Origen</th><td>{v_data.get('Origen')}</td><th>Destino</th><td>{v_data.get('Destino')}</td></tr>
+            <tr><th>Duración Est.</th><td>{v_data.get('Duracion')}</td><th>Fecha Cierre</th><td>{v_data.get('Fecha_Fin', 'En curso')}</td></tr>
+        </table>
+
+        <h2>3. ANÁLISIS DE RIESGOS</h2>
+        <table class="tbl">
+            <tr><th>Distancia</th><td>{v_data.get('R_Distancia')}</td><th>Clima</th><td>{v_data.get('R_Clima')}</td></tr>
+            <tr><th>Pasajeros</th><td>{v_data.get('R_Pasajeros')} ({v_data.get('Detalle_Pasajeros', 'N/A')})</td><th>Camino</th><td>{v_data.get('R_Camino')}</td></tr>
+            <tr><th>Sueño +8hs</th><td>{v_data.get('R_Sueno')}</td><th>Horas Servicio</th><td>{v_data.get('R_Horas')}</td></tr>
+        </table>
+
+        <h2>4. CHECKLIST TÉCNICO</h2>
+        <table style="width: 100%;" class="tbl">
+            <tr>
+                <td style="width: 50%; vertical-align: top;">
+                    <strong style="color: #1e3a8a; font-size: 9pt;">A. Equipamiento</strong>
+                    <table style="width: 100%; border-collapse: collapse;">{eq_html}</table>
+                </td>
+                <td style="width: 50%; vertical-align: top;">
+                    <strong style="color: #1e3a8a; font-size: 9pt;">B. Documentación</strong>
+                    <table style="width: 100%; border-collapse: collapse;">{doc_html}</table>
+                </td>
+            </tr>
+        </table>
+
+        <div class="badge">
+            <strong style="color: #c2410c; font-size: 11pt;">EVALUACIÓN: NIVEL {v_data.get('Nivel')} ({v_data.get('Puntaje')} PTS)</strong><br>
+            <span style="font-size: 9pt;">Aprobado por: <b>{v_data.get('Aprobador')}</b> ({v_data.get('Fecha_Aprobacion')})</span>
+        </div>
+
+        <div class="ddjj">
+            <b>CERTIFICACIÓN LEGAL:</b> Los datos aquí expuestos poseen carácter de Declaración Jurada, registrados por el operador y convalidados por la supervisión de MARBAR SA.
+        </div>
+    </body>
+    </html>
+    """
+    return html
 
 # --- GESTOR DE SESIÓN ---
 if "usuario_actual" not in st.session_state: 
@@ -313,28 +350,63 @@ if st.session_state["paso_actual"] == "Menu":
         st.success("El viaje se cerró correctamente en el sistema operativo.")
         st.markdown(f"### [📱 ENVIAR AVISO DE LLEGADA POR WHATSAPP]({link_llegada_wa})")
         
-        if st.button("Ocultar Aviso"):
+        if st.button("Ocultar Aviso", key="ocultar_llegada"):
             del st.session_state["alerta_llegada"]
+            st.rerun()
+        st.markdown("---")
+        
+    # --- AVISO WHATSAPP DE CANCELACIÓN DE VIAJE ---
+    if "alerta_cancelacion" in st.session_state:
+        v_canc = st.session_state["alerta_cancelacion"]
+        msg_canc_wa = f"❌ *VIAJE CANCELADO - MARBAR*\n\n🔹 *Conductor:* {st.session_state['nombre_empleado']}\n🔹 *Viaje ID:* {v_canc['id']}\n🔹 *Destino:* {v_canc['destino']}\n\n👉 *El viaje ha sido suspendido y cerrado en el sistema.*"
+        link_canc_wa = f"https://wa.me/?text={urllib.parse.quote(msg_canc_wa)}"
+        
+        st.warning("El viaje fue cancelado y retirado de la ruta activa.")
+        st.markdown(f"### [📱 ENVIAR AVISO DE CANCELACIÓN POR WHATSAPP]({link_canc_wa})")
+        
+        if st.button("Ocultar Aviso", key="ocultar_canc"):
+            del st.session_state["alerta_cancelacion"]
             st.rerun()
         st.markdown("---")
     
     if st.session_state["usuario_actual"] != "ADMIN":
-        viajes_activos = db.collection(COLECCION_VIAJES).where("Chofer", "==", st.session_state["nombre_empleado"]).where("Estado_Viaje", "==", "En viaje").stream()
+        # CORRECCIÓN AQUÍ: Usamos "in" para buscar tanto viajes "En viaje" como "En espera"
+        viajes_activos = db.collection(COLECCION_VIAJES).where("Chofer", "==", st.session_state["nombre_empleado"]).where("Estado_Viaje", "in", ["En viaje", "En espera"]).stream()
         lista_activos = []
         for d in viajes_activos:
             lista_activos.append(d.to_dict())
             
         if lista_activos:
-            st.info("📍 Tiene un viaje abierto en curso.")
+            st.info("📍 Estado de su viaje actual:")
             for v in lista_activos:
-                col_info, col_accion = st.columns([3, 1])
-                col_info.write(f"**ID {v['ID']}** | Destino: {v['Destino']}")
-                if col_accion.button(f"🏁 Llegué a destino", key=f"menu_fin_{v['ID']}"):
+                # --- VALIDACIÓN DE ESTADO PARA EL CHOFER ---
+                estado_aprobacion = v.get("Aprobacion", "🔴 Pendiente")
+                
+                if "Aprobado" in estado_aprobacion:
+                    st.success(f"🚀 **VIAJE AUTORIZADO (ID {v['ID']})**\n\nEl supervisor ya firmó digitalmente. Está habilitado para iniciar la marcha hacia **{v['Destino']}** de forma segura.")
+                else:
+                    st.warning(f"⏳ **ESPERANDO APROBACIÓN (ID {v['ID']})**\n\nSu solicitud de viaje hacia **{v['Destino']}** requiere validación de la supervisión. **No mueva la unidad hasta recibir la autorización en este panel.**")
+                
+                # Columnas para los botones de cierre operativos
+                col_info, col_accion, col_canc = st.columns([1, 1, 1])
+                col_info.write(f"**Gestión ID {v['ID']}**")
+                
+                # BOTÓN: LLEGADA
+                if col_accion.button(f"🏁 Llegar", key=f"menu_fin_{v['ID']}"):
                     db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
                         "Estado_Viaje": "Finalizado", 
                         "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                     })
                     st.session_state["alerta_llegada"] = {"id": v['ID'], "destino": v['Destino']}
+                    st.rerun()
+                    
+                # BOTÓN: CANCELACIÓN
+                if col_canc.button(f"❌ Cancelar", key=f"menu_canc_{v['ID']}"):
+                    db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
+                        "Estado_Viaje": "Cancelado", 
+                        "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
+                    })
+                    st.session_state["alerta_cancelacion"] = {"id": v['ID'], "destino": v['Destino']}
                     st.rerun()
 
     st.markdown("---")
@@ -351,6 +423,7 @@ if st.session_state["paso_actual"] == "Menu":
 
 # 2. TEST DE FATIGA
 elif st.session_state["paso_actual"] == "Test_Chofer":
+    st.warning("⚖️ **DECLARACIÓN JURADA:** La información ingresada en este gerenciamiento reviste carácter de Declaración Jurada. Cualquier omisión o falsedad sobre su estado o el del vehículo constituye una falta grave a las normativas de seguridad (SSA).")
     st.subheader("🛡️ Paso 1: Control de Fatiga")
     
     t1 = st.radio("¿Se siente descansado y en condiciones?", ["Sí", "No"], index=None)
@@ -376,37 +449,39 @@ elif st.session_state["paso_actual"] == "Test_Chofer":
 
 # 3. INSPECCIÓN VEHÍCULO
 elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
-    st.subheader("🚘 Paso 2: Check-list Preventivo")
+    st.warning("⚖️ **DECLARACIÓN JURADA:** La información ingresada en este gerenciamiento reviste carácter de Declaración Jurada. Cualquier omisión o falsedad sobre su estado o el del vehículo constituye una falta grave a las normativas de seguridad (SSA).")
+    st.subheader("🚘 Paso 2: Condiciones del Vehículo")
     
-    st.markdown("#### A. Equipamiento")
+    st.markdown("#### A. Equipamiento y Estado Técnico")
     eq_items = [
-        "1. Cinturón De Seguridad", 
-        "2. Torque En Pernos", 
-        "3. Triángulos x2", 
-        "4. Neumático Auxilio/Cric", 
-        "5. Extintor", 
-        "6. Alarma Retroceso", 
-        "7. Botiquín", 
-        "8. Cadenas/Clavos", 
-        "9. Pala/Supervivencia", 
-        "10. Verificación 360°"
+        "1. Frenos de Servicio en Correcto Funcionamiento",
+        "2. Freno de Estacionamiento en Correcto Funcionamiento",
+        "3. Neumáticos en buen estado (mín. 1,6mm, sin daños ni deformaciones)",
+        "4. Sistema de Dirección y Suspensión íntegro libre de pérdidas de fluidos",
+        "5. Tablero de instrumentos libre de indicadores (luces prendidas)",
+        "6. Cinturones de Seguridad Funcional en todas las plazas",
+        "7. Apoyacabeza en todas las plazas de la unidad",
+        "8. Extintor Vigente, precintado y asegurado correctamente",
+        "9. Balizas Portátiles/Triángulos Reflectivos",
+        "10. Kit de Herramientas para cambio de neumáticos",
+        "11. Rueda de Auxilio Operativa",
+        "12. Airbag Operativo (Verificar ausencia de testigo en tablero)",
+        "13. Sist. ABS Operativo (Verificar ausencia de testigo en tablero)",
+        "14. MVI (GPRS) Operativo",
+        "15. Kit Invernal"
     ]
     respuestas_eq = {}
     for item in eq_items:
         respuestas_eq[item] = st.radio(item, ["Sí", "No", "N/A"], index=None, horizontal=True)
         
     st.markdown("---")
-    st.markdown("#### B. Documentación")
+    st.markdown("#### B. Documentación Obligatoria")
     doc_items = [
-        "1. Tarjeta Propiedad", 
-        "2. Póliza Seguro", 
-        "3. Revisión Técnica", 
-        "4. Licencia", 
-        "5. Manejo Defensivo", 
-        "6. Credencial", 
-        "7. Ingreso Yacimientos", 
-        "8. Permisos Especiales", 
-        "9. Curso 4x4"
+        "1. Licencia de conducir vigente y acorde al vehículo",
+        "2. Cédula Verde/Azul",
+        "3. RTO Libre de observaciones",
+        "4. Seguro del Vehículo",
+        "5. Curso conducción Defensiva Chofer"
     ]
     respuestas_doc = {}
     for item in doc_items:
@@ -428,7 +503,7 @@ elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
             else:
                 hay_negativas = any(v == "No" for v in respuestas_eq.values()) or any(v == "No" for v in respuestas_doc.values())
                 if hay_negativas:
-                    st.error("⛔ Elementos marcados con 'No'. Prohibido el despacho.")
+                    st.error("⛔ Elementos marcados con 'No'. Prohibido el viaje.")
                 else:
                     st.session_state["inspeccion_vehiculo"] = "Aprobada"
                     st.session_state["resp_eq"] = respuestas_eq
@@ -438,6 +513,7 @@ elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
 
 # 4. FORMULARIO Y RIESGO
 elif st.session_state["paso_actual"] == "Formulario_Viaje":
+    st.warning("⚖️ **DECLARACIÓN JURADA:** La información ingresada en este gerenciamiento reviste carácter de Declaración Jurada. Cualquier omisión o falsedad sobre su estado o el del vehículo constituye una falta grave a las normativas de seguridad (SSA).")
     st.subheader("🛡️ Paso 3: Análisis de Riesgo")
     
     sector_usuario = st.session_state["sector_empleado"]
@@ -678,14 +754,21 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                         cabecera_wa = f"💠 NUEVA SOLICITUD ID {nuevo_id} 💠"
                         pie_wa = f"👉 Por favor, apruebe en la plataforma MARBAR."
 
+                    if color_semaforo == "green":
+                        cabecera_wa = f"🟢 *VIAJE AUTO-APROBADO ID {nuevo_id}*"
+                        pie_wa = f"👉 *Aprobado automáticamente por sistema.*"
+                    else:
+                        cabecera_wa = f"🔴 *NUEVA SOLICITUD ID {nuevo_id}*"
+                        pie_wa = f"👉 *Por favor, apruebe en la plataforma MARBAR.*"
+
                     tkt = (
                         f"{cabecera_wa}\n\n"
-                        f"🔹 Chofer: {nombre_chofer}\n"
-                        f"🔹 Vehículo: {vehiculo_sel}\n"
-                        f"🔹 Origen: {origen_txt}\n"
-                        f"🔹 Destino: {destino_txt}\n"
-                        f"🔹 Duración: {duracion_final_txt}\n"
-                        f"🔹 Riesgo: Nivel {nivel_riesgo_calculado}\n\n"
+                        f"🔹 *Chofer:* {nombre_chofer}\n"
+                        f"🔹 *Vehículo:* {vehiculo_sel}\n"
+                        f"🔹 *Origen:* {origen_txt}\n"
+                        f"🔹 *Destino:* {destino_txt}\n"
+                        f"🔹 *Duración:* {duracion_final_txt}\n"
+                        f"🔹 *Riesgo:* Nivel {nivel_riesgo_calculado}\n\n"
                         f"{pie_wa}"
                     )
                     
@@ -724,8 +807,8 @@ elif st.session_state["paso_actual"] == "Historial":
                 id_ext = v_sel.split(" - ")[0]
                 d_v = df_h[df_h["ID"].astype(str) == id_ext].iloc[0]
                 
-                reporte_estructurado = generar_ticket_txt(d_v)
-                st.download_button("📥 Descargar TXT", reporte_estructurado, f"MARBAR_Viaje_{id_ext}.txt")
+                reporte_html = generar_ficha_html(d_v)
+                st.download_button("📥 Descargar Ficha PDF", reporte_html, f"MARBAR_Auditoria_{id_ext}.html", mime="text/html")
                 
         else:
             st.info("No hay viajes en el historial.")
@@ -742,7 +825,12 @@ with st.sidebar:
     st.header("📊 SSA & Logística")
     
     if st.session_state["usuario_actual"]:
-        if st.button("🚪 Cerrar Sesión"): 
+        
+        # --- BOTÓN DE ACTUALIZACIÓN (NO PIERDE LA SESIÓN) ---
+        if st.button("🔄 Actualizar Pantalla", use_container_width=True):
+            st.rerun()
+            
+        if st.button("🚪 Cerrar Sesión", use_container_width=True): 
             st.session_state.clear()
             st.rerun()
 
@@ -777,7 +865,7 @@ try:
             st.sidebar.write("✅ Ninguna.")
 
         st.sidebar.markdown("---")
-        st.sidebar.subheader("📜 TXT Rápido")
+        st.sidebar.subheader("📜 Ficha Rápida")
         
         df_sb_ord = df_sb.sort_values(by="ID", ascending=False)
         op_sb = [""]
@@ -790,8 +878,18 @@ try:
             id_sb = v_sb.split(" - ")[0]
             d_sb = df_sb[df_sb["ID"].astype(str) == id_sb].iloc[0]
             
-            reporte_sb_txt = generar_ticket_txt(d_sb)
-            st.sidebar.download_button("📥 Descargar Ficha", reporte_sb_txt, f"Ficha_{id_sb}.txt", key="btn_sb_txt")
+            # --- CORRECCIÓN AQUÍ: Llamamos a la nueva función HTML ---
+            reporte_sb_html = generar_ficha_html(d_sb)
+            st.sidebar.download_button(
+                label="📥 Descargar Ficha PDF", 
+                data=reporte_sb_html, 
+                file_name=f"MARBAR_Auditoria_{id_sb}.html", 
+                mime="text/html",
+                key="btn_sb_txt"
+            )
+            
+            reporte_html = generar_ficha_html(d_v)
+            st.download_button("📥 Descargar Ficha PDF", reporte_html, f"MARBAR_Auditoria_{id_ext}.html", mime="text/html")
 
         if st.session_state["usuario_actual"] == "ADMIN":
             st.sidebar.markdown("---")
