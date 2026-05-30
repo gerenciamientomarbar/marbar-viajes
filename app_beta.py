@@ -175,17 +175,26 @@ def generar_ticket_txt(v_data):
     chk_eq = v_data.get('Checklist_Eq', {})
     chk_doc = v_data.get('Checklist_Doc', {})
     
+    # --- FUNCIÓN INTERNA PARA ORDENAR NUMÉRICAMENTE ---
+    # Lee el número antes del punto (Ej: "10. Kit" -> 10) para ordenarlo bien.
+    def ordenar_por_numero(texto):
+        try:
+            return int(texto.split(".")[0])
+        except:
+            return 99
+
     str_eq = ""
     if chk_eq:
-        for k, v in chk_eq.items():
-            str_eq += f"  - {k}: {v}\n"
+        # Ordenamos usando la función matemática
+        for k in sorted(chk_eq.keys(), key=ordenar_por_numero):
+            str_eq += f"  - {k}: {chk_eq[k]}\n"
     else:
         str_eq = "  (Sin datos de equipamiento)\n"
         
     str_doc = ""
     if chk_doc:
-        for k, v in chk_doc.items():
-            str_doc += f"  - {k}: {v}\n"
+        for k in sorted(chk_doc.keys(), key=ordenar_por_numero):
+            str_doc += f"  - {k}: {chk_doc[k]}\n"
     else:
         str_doc = "  (Sin datos de documentación)\n"
 
