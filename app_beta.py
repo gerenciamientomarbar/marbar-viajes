@@ -717,14 +717,21 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                         cabecera_wa = f"💠 NUEVA SOLICITUD ID {nuevo_id} 💠"
                         pie_wa = f"👉 Por favor, apruebe en la plataforma MARBAR."
 
+                    if color_semaforo == "green":
+                        cabecera_wa = f"🟢 *VIAJE AUTO-APROBADO ID {nuevo_id}*"
+                        pie_wa = f"👉 *Aprobado automáticamente por sistema.*"
+                    else:
+                        cabecera_wa = f"🔴 *NUEVA SOLICITUD ID {nuevo_id}*"
+                        pie_wa = f"👉 *Por favor, apruebe en la plataforma MARBAR.*"
+
                     tkt = (
                         f"{cabecera_wa}\n\n"
-                        f"🔹 Chofer: {nombre_chofer}\n"
-                        f"🔹 Vehículo: {vehiculo_sel}\n"
-                        f"🔹 Origen: {origen_txt}\n"
-                        f"🔹 Destino: {destino_txt}\n"
-                        f"🔹 Duración: {duracion_final_txt}\n"
-                        f"🔹 Riesgo: Nivel {nivel_riesgo_calculado}\n\n"
+                        f"🔹 *Chofer:* {nombre_chofer}\n"
+                        f"🔹 *Vehículo:* {vehiculo_sel}\n"
+                        f"🔹 *Origen:* {origen_txt}\n"
+                        f"🔹 *Destino:* {destino_txt}\n"
+                        f"🔹 *Duración:* {duracion_final_txt}\n"
+                        f"🔹 *Riesgo:* Nivel {nivel_riesgo_calculado}\n\n"
                         f"{pie_wa}"
                     )
                     
