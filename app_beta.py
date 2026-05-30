@@ -171,30 +171,28 @@ def calcular_duracion_real(fecha_inicio, fecha_fin):
         return "Error de cálculo"
 
 def generar_ticket_txt(v_data):
-    """Genera el reporte TXT con el formato profesional corporativo"""
+    """Genera el reporte TXT con el formato profesional corporativo alineado"""
     chk_eq = v_data.get('Checklist_Eq', {})
     chk_doc = v_data.get('Checklist_Doc', {})
     
-    # --- FUNCIÓN INTERNA PARA ORDENAR NUMÉRICAMENTE ---
-    # Lee el número antes del punto (Ej: "10. Kit" -> 10) para ordenarlo bien.
     def ordenar_por_numero(texto):
         try:
             return int(texto.split(".")[0])
         except:
             return 99
 
+    # Usamos ljust(68, '.') para rellenar con puntos y forzar la alineación
     str_eq = ""
     if chk_eq:
-        # Ordenamos usando la función matemática
         for k in sorted(chk_eq.keys(), key=ordenar_por_numero):
-            str_eq += f"  - {k}: {chk_eq[k]}\n"
+            str_eq += f"  {k.ljust(68, '.')} {str(chk_eq[k]).upper()}\n"
     else:
         str_eq = "  (Sin datos de equipamiento)\n"
         
     str_doc = ""
     if chk_doc:
         for k in sorted(chk_doc.keys(), key=ordenar_por_numero):
-            str_doc += f"  - {k}: {chk_doc[k]}\n"
+            str_doc += f"  {k.ljust(68, '.')} {str(chk_doc[k]).upper()}\n"
     else:
         str_doc = "  (Sin datos de documentación)\n"
 
@@ -206,42 +204,42 @@ EQUIPAMIENTO:
 {str_eq}
 DOCUMENTACIÓN:
 {str_doc}
-=========================================
-      REPORTE INTEGRAL DE RUTA
-=========================================
-REGIONAL       : {v_data.get('Regional', 'N/A')}
-SECTOR         : {v_data.get('Sector', 'N/A')}
-CARGO          : {v_data.get('Cargo', 'N/A')}
+===========================================================================
+                          REPORTE INTEGRAL DE RUTA
+===========================================================================
+REGIONAL       : {v_data.get('Regional', 'N/A').upper()}
+SECTOR         : {v_data.get('Sector', 'N/A').upper()}
+CARGO          : {v_data.get('Cargo', 'N/A').upper()}
 FECHA          : {v_data.get('Fecha')}
------------------------------------------
+---------------------------------------------------------------------------
 1. RUTA Y TIEMPOS
-ORIGEN         : {v_data.get('Origen')}
-DESTINO        : {v_data.get('Destino')}
+ORIGEN         : {v_data.get('Origen').upper()}
+DESTINO        : {v_data.get('Destino').upper()}
 DURACIÓN EST.  : {v_data.get('Duracion')}
-TIPO SALIDA    : {v_data.get('Salida', 'N/A')}
+TIPO SALIDA    : {v_data.get('Salida', 'N/A').upper()}
 FECHA CIERRE   : {v_data.get('Fecha_Fin', 'N/A')}
------------------------------------------
+---------------------------------------------------------------------------
 2. PREVENCIÓN PREVIA 
-TEST FATIGA    : {v_data.get('Test_Chofer', 'N/A')}
-INSPECCIÓN V.  : {v_data.get('Inspeccion_Vehiculo', 'N/A')}
------------------------------------------
+TEST FATIGA    : {str(v_data.get('Test_Chofer', 'N/A')).upper()}
+INSPECCIÓN V.  : {str(v_data.get('Inspeccion_Vehiculo', 'N/A')).upper()}
+---------------------------------------------------------------------------
 3. EVALUACIÓN DE RIESGOS 
-DISTANCIA      : {v_data.get('R_Distancia', 'N/A')}
-CLIMA          : {v_data.get('R_Clima', 'N/A')}
-PASAJEROS      : {v_data.get('R_Pasajeros', 'N/A')} ({v_data.get('Detalle_Pasajeros', 'N/A')})
-CAMINO         : {v_data.get('R_Camino', 'N/A')}
-SUEÑO +8HS     : {v_data.get('R_Sueno', 'N/A')}
-HS TOTALES     : {v_data.get('R_Horas', 'N/A')}
-ESCOLTA        : {v_data.get('R_Escolta', 'N/A')}
-COMUNICACIÓN   : {v_data.get('R_Com', 'N/A')}
------------------------------------------
+DISTANCIA      : {str(v_data.get('R_Distancia', 'N/A')).upper()}
+CLIMA          : {str(v_data.get('R_Clima', 'N/A')).upper()}
+PASAJEROS      : {str(v_data.get('R_Pasajeros', 'N/A')).upper()} ({str(v_data.get('Detalle_Pasajeros', 'N/A')).upper()})
+CAMINO         : {str(v_data.get('R_Camino', 'N/A')).upper()}
+SUEÑO +8HS     : {str(v_data.get('R_Sueno', 'N/A')).upper()}
+HS TOTALES     : {str(v_data.get('R_Horas', 'N/A')).upper()}
+ESCOLTA        : {str(v_data.get('R_Escolta', 'N/A')).upper()}
+COMUNICACIÓN   : {str(v_data.get('R_Com', 'N/A')).upper()}
+---------------------------------------------------------------------------
 4. RESULTADO Y APROBACIÓN
 PUNTAJE TOTAL  : {v_data.get('Puntaje')}
-NIVEL RIESGO   : Nivel {v_data.get('Nivel')}
-APROBADO POR   : {v_data.get('Aprobador', 'N/A')}
+NIVEL RIESGO   : NIVEL {v_data.get('Nivel')}
+APROBADO POR   : {str(v_data.get('Aprobador', 'N/A')).upper()}
 HORA APROB.    : {v_data.get('Fecha_Aprobacion', 'N/A')}
-ESTADO FINAL   : {v_data.get('Estado_Viaje', 'N/A')}
-========================================="""
+ESTADO FINAL   : {str(v_data.get('Estado_Viaje', 'N/A')).upper()}
+==========================================================================="""
     return reporte
 
 # --- GESTOR DE SESIÓN ---
