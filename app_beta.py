@@ -170,77 +170,107 @@ def calcular_duracion_real(fecha_inicio, fecha_fin):
     except Exception:
         return "Error de cálculo"
 
-def generar_ticket_txt(v_data):
-    """Genera el reporte TXT con el formato profesional corporativo alineado"""
-    chk_eq = v_data.get('Checklist_Eq', {})
-    chk_doc = v_data.get('Checklist_Doc', {})
+def generar_ficha_html(v_data):
+    """Genera la ficha corporativa de auditoría en formato HTML para impresión/PDF"""
     
+    # Función para ordenar numéricamente los items
     def ordenar_por_numero(texto):
-        try:
-            return int(texto.split(".")[0])
-        except:
-            return 99
-
-    # Usamos ljust(68, '.') para rellenar con puntos y forzar la alineación
-    str_eq = ""
+        try: return int(texto.split(".")[0])
+        except: return 99
+    
+    # Procesamiento del Equipamiento
+    eq_html = ""
+    chk_eq = v_data.get('Checklist_Eq', {})
     if chk_eq:
         for k in sorted(chk_eq.keys(), key=ordenar_por_numero):
-            str_eq += f"  {k.ljust(68, '.')} {str(chk_eq[k]).upper()}\n"
-    else:
-        str_eq = "  (Sin datos de equipamiento)\n"
-        
-    str_doc = ""
+            v = chk_eq[k]
+            color = "#16a34a" if v == "Sí" else ("#dc2626" if v == "No" else "#64748b")
+            eq_html += f'<tr><td style="padding: 4px; border-bottom: 1px solid #f1f5f9; font-size: 9pt;">{k}</td><td style="text-align: right; font-weight: bold; width: 15%; color: {color};">{str(v).upper()}</td></tr>'
+    else: eq_html = "<tr><td colspan='2'>Sin datos</td></tr>"
+
+    # Procesamiento de Documentación
+    doc_html = ""
+    chk_doc = v_data.get('Checklist_Doc', {})
     if chk_doc:
         for k in sorted(chk_doc.keys(), key=ordenar_por_numero):
-            str_doc += f"  {k.ljust(68, '.')} {str(chk_doc[k]).upper()}\n"
-    else:
-        str_doc = "  (Sin datos de documentación)\n"
+            v = chk_doc[k]
+            color = "#16a34a" if v == "Sí" else ("#dc2626" if v == "No" else "#64748b")
+            doc_html += f'<tr><td style="padding: 4px; border-bottom: 1px solid #f1f5f9; font-size: 9pt;">{k}</td><td style="text-align: right; font-weight: bold; width: 15%; color: {color};">{str(v).upper()}</td></tr>'
+    else: doc_html = "<tr><td colspan='2'>Sin datos</td></tr>"
 
-    reporte = f"""MARBAR TRIP ID {v_data.get('ID')}
-Conductor: {v_data.get('Chofer')}
-Unidad: {v_data.get('Vehiculo')}
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <title>Ficha MARBAR ID {v_data.get('ID')}</title>
+        <style>
+            @media print {{
+                @page {{ margin: 15mm; }}
+                body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+            }}
+            body {{ font-family: Arial, sans-serif; font-size: 10pt; color: #1e293b; max-width: 800px; margin: 0 auto; padding: 20px; }}
+            h2 {{ color: #1e3a8a; font-size: 12pt; background-color: #f1f5f9; padding: 6px 10px; border-left: 4px solid #e65100; margin-top: 15px; }}
+            .tbl {{ width: 100%; border-collapse: collapse; margin-bottom: 10px; }}
+            .tbl th, .tbl td {{ padding: 6px; text-align: left; border-bottom: 1px solid #e2e8f0; }}
+            .tbl th {{ background-color: #f8fafc; width: 30%; }}
+            .badge {{ background-color: #fff7ed; border: 1px solid #ffedd5; padding: 10px; text-align: center; border-radius: 5px; margin-top: 15px; }}
+            .ddjj {{ font-size: 8pt; color: #64748b; border: 1px dashed #cbd5e1; padding: 10px; background-color: #fafafa; margin-top: 20px; text-align: justify; }}
+        </style>
+    </head>
+    <body onload="window.print()">
+        <table style="width: 100%; border-bottom: 3px solid #1e3a8a; margin-bottom: 15px;">
+            <tr>
+                <td><strong style="color: #1e3a8a; font-size: 16pt;">MARBAR SA</strong><br><span style="color: #475569; font-size: 9pt;">Auditoría de Gerenciamiento de Viaje</span></td>
+                <td style="text-align: right;"><strong style="color: #e65100; font-size: 12pt;">ID #{v_data.get('ID')}</strong><br><span style="color: #475569; font-size: 9pt;">Estado: <b>{str(v_data.get('Estado_Viaje')).upper()}</b></span></td>
+            </tr>
+        </table>
 
-EQUIPAMIENTO:
-{str_eq}
-DOCUMENTACIÓN:
-{str_doc}
-===========================================================================
-                          REPORTE INTEGRAL DE RUTA
-===========================================================================
-REGIONAL       : {v_data.get('Regional', 'N/A').upper()}
-SECTOR         : {v_data.get('Sector', 'N/A').upper()}
-CARGO          : {v_data.get('Cargo', 'N/A').upper()}
-FECHA          : {v_data.get('Fecha')}
----------------------------------------------------------------------------
-1. RUTA Y TIEMPOS
-ORIGEN         : {v_data.get('Origen').upper()}
-DESTINO        : {v_data.get('Destino').upper()}
-DURACIÓN EST.  : {v_data.get('Duracion')}
-TIPO SALIDA    : {v_data.get('Salida', 'N/A').upper()}
-FECHA CIERRE   : {v_data.get('Fecha_Fin', 'N/A')}
----------------------------------------------------------------------------
-2. PREVENCIÓN PREVIA 
-TEST FATIGA    : {str(v_data.get('Test_Chofer', 'N/A')).upper()}
-INSPECCIÓN V.  : {str(v_data.get('Inspeccion_Vehiculo', 'N/A')).upper()}
----------------------------------------------------------------------------
-3. EVALUACIÓN DE RIESGOS 
-DISTANCIA      : {str(v_data.get('R_Distancia', 'N/A')).upper()}
-CLIMA          : {str(v_data.get('R_Clima', 'N/A')).upper()}
-PASAJEROS      : {str(v_data.get('R_Pasajeros', 'N/A')).upper()} ({str(v_data.get('Detalle_Pasajeros', 'N/A')).upper()})
-CAMINO         : {str(v_data.get('R_Camino', 'N/A')).upper()}
-SUEÑO +8HS     : {str(v_data.get('R_Sueno', 'N/A')).upper()}
-HS TOTALES     : {str(v_data.get('R_Horas', 'N/A')).upper()}
-ESCOLTA        : {str(v_data.get('R_Escolta', 'N/A')).upper()}
-COMUNICACIÓN   : {str(v_data.get('R_Com', 'N/A')).upper()}
----------------------------------------------------------------------------
-4. RESULTADO Y APROBACIÓN
-PUNTAJE TOTAL  : {v_data.get('Puntaje')}
-NIVEL RIESGO   : NIVEL {v_data.get('Nivel')}
-APROBADO POR   : {str(v_data.get('Aprobador', 'N/A')).upper()}
-HORA APROB.    : {v_data.get('Fecha_Aprobacion', 'N/A')}
-ESTADO FINAL   : {str(v_data.get('Estado_Viaje', 'N/A')).upper()}
-==========================================================================="""
-    return reporte
+        <h2>1. PERSONAL Y UNIDAD</h2>
+        <table class="tbl">
+            <tr><th>Conductor</th><td>{v_data.get('Chofer')}</td><th>Unidad</th><td>{v_data.get('Vehiculo')}</td></tr>
+            <tr><th>Sector/Cargo</th><td>{v_data.get('Sector')} / {v_data.get('Cargo')}</td><th>Regional</th><td>{v_data.get('Regional')}</td></tr>
+        </table>
+
+        <h2>2. RUTA Y TIEMPOS</h2>
+        <table class="tbl">
+            <tr><th>Origen</th><td>{v_data.get('Origen')}</td><th>Destino</th><td>{v_data.get('Destino')}</td></tr>
+            <tr><th>Duración Est.</th><td>{v_data.get('Duracion')}</td><th>Fecha Cierre</th><td>{v_data.get('Fecha_Fin', 'En curso')}</td></tr>
+        </table>
+
+        <h2>3. ANÁLISIS DE RIESGOS</h2>
+        <table class="tbl">
+            <tr><th>Distancia</th><td>{v_data.get('R_Distancia')}</td><th>Clima</th><td>{v_data.get('R_Clima')}</td></tr>
+            <tr><th>Pasajeros</th><td>{v_data.get('R_Pasajeros')} ({v_data.get('Detalle_Pasajeros', 'N/A')})</td><th>Camino</th><td>{v_data.get('R_Camino')}</td></tr>
+            <tr><th>Sueño +8hs</th><td>{v_data.get('R_Sueno')}</td><th>Horas Servicio</th><td>{v_data.get('R_Horas')}</td></tr>
+        </table>
+
+        <h2>4. CHECKLIST TÉCNICO</h2>
+        <table style="width: 100%;" class="tbl">
+            <tr>
+                <td style="width: 50%; vertical-align: top;">
+                    <strong style="color: #1e3a8a; font-size: 9pt;">A. Equipamiento</strong>
+                    <table style="width: 100%; border-collapse: collapse;">{eq_html}</table>
+                </td>
+                <td style="width: 50%; vertical-align: top;">
+                    <strong style="color: #1e3a8a; font-size: 9pt;">B. Documentación</strong>
+                    <table style="width: 100%; border-collapse: collapse;">{doc_html}</table>
+                </td>
+            </tr>
+        </table>
+
+        <div class="badge">
+            <strong style="color: #c2410c; font-size: 11pt;">EVALUACIÓN: NIVEL {v_data.get('Nivel')} ({v_data.get('Puntaje')} PTS)</strong><br>
+            <span style="font-size: 9pt;">Aprobado por: <b>{v_data.get('Aprobador')}</b> ({v_data.get('Fecha_Aprobacion')})</span>
+        </div>
+
+        <div class="ddjj">
+            <b>CERTIFICACIÓN LEGAL:</b> Los datos aquí expuestos poseen carácter de Declaración Jurada, registrados por el operador y convalidados por la supervisión de MARBAR SA.
+        </div>
+    </body>
+    </html>
+    """
+    return html
 
 # --- GESTOR DE SESIÓN ---
 if "usuario_actual" not in st.session_state: 
@@ -777,8 +807,8 @@ elif st.session_state["paso_actual"] == "Historial":
                 id_ext = v_sel.split(" - ")[0]
                 d_v = df_h[df_h["ID"].astype(str) == id_ext].iloc[0]
                 
-                reporte_estructurado = generar_ticket_txt(d_v)
-                st.download_button("📥 Descargar TXT", reporte_estructurado, f"MARBAR_Viaje_{id_ext}.txt")
+                reporte_html = generar_ficha_html(d_v)
+                st.download_button("📥 Descargar Ficha PDF", reporte_html, f"MARBAR_Auditoria_{id_ext}.html", mime="text/html")
                 
         else:
             st.info("No hay viajes en el historial.")
@@ -848,8 +878,8 @@ try:
             id_sb = v_sb.split(" - ")[0]
             d_sb = df_sb[df_sb["ID"].astype(str) == id_sb].iloc[0]
             
-            reporte_sb_txt = generar_ticket_txt(d_sb)
-            st.sidebar.download_button("📥 Descargar Ficha", reporte_sb_txt, f"Ficha_{id_sb}.txt", key="btn_sb_txt")
+            reporte_html = generar_ficha_html(d_v)
+            st.download_button("📥 Descargar Ficha PDF", reporte_html, f"MARBAR_Auditoria_{id_ext}.html", mime="text/html")
 
         if st.session_state["usuario_actual"] == "ADMIN":
             st.sidebar.markdown("---")
