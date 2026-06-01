@@ -523,7 +523,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     
     mapa_autoridad = {
         "Chofer": 0, 
-        "Supervisor / Coordinador": 1, 
+        "Supervisor / Coordinador / Ingeniero": 1, 
         "Jefe de Servicio": 2, 
         "Gerencia": 3, 
         "ADMIN": 3
@@ -940,7 +940,7 @@ except Exception as e_sidebar:
     pass
 
 # --- 7. BANDEJA APROBACIONES ---
-if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia"]:
+if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
     st.markdown("---")
     st.title("📥 Bandeja de Validaciones")
     
@@ -980,8 +980,8 @@ if st.session_state["usuario_actual"] == "ADMIN":
         adm_nombre = st.text_input("Nombre y Apellido Real:").strip()
         adm_dni = st.text_input("DNI:").strip()
         adm_regional = st.text_input("Regional a la que pertenece (Ej: Neuquén, Río Negro):").strip()
-        adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia"])
-        adm_rol = st.selectbox("Rol:", ["Chofer", "Supervisor / Coordinador", "Jefe de Servicio", "Gerencia", "ADMIN"])
+        adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia", "Completacion"])
+        adm_rol = st.selectbox("Rol:", ["Chofer", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "ADMIN"])
         
         if st.button("💾 Crear Usuario y Enviar Acceso"):
             if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
