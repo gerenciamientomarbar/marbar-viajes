@@ -1,37 +1,40 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import json
-import firebase_admin
-from firebase_admin import credentials, firestore, auth
 import urllib.parse
-import io
+from PIL import Image
 import os
-import requests
+import io
+import streamlit.components.v1 as components
 import random
 import string
-from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table, TableStyleInfo
 
-# --- CONFIGURACIÓN DE SEGURIDAD DEL IDP ---
-# Coloca aquí la Clave de API web que obtuviste de Firebase
-API_KEY_FIREBASE = "AIzaSyAHE35ma-FT5xy1uvacwX2g_CtLbmyCWrs" 
+# --- NUEVAS LIBRERÍAS PARA AUTH0 ---
+from authlib.integrations.requests_client import OAuth2Session
 
-# --- CONFIGURACIÓN DE LA BASE DE DATOS CENTRAL ---
-# Apuntamos a la colección limpia para iniciar Producción.
-# Los registros históricos quedan a salvo en "viajes"
-COLECCION_VIAJES = "viajes"
-
-# --- CONFIGURACIÓN DE ZONA HORARIA (ARGENTINA UTC-3) ---
-TZ_AR = timezone(timedelta(hours=-3))
-
-# --- CONFIGURACIÓN DE LA PÁGINA ---
+# -----------------------------------------
+# CONFIGURACIÓN DE PÁGINA
+# -----------------------------------------
 st.set_page_config(
     layout="wide", 
     page_title="MARBAR - Gestión de Viajes",
     page_icon="🚛"
 )
+
+# -----------------------------------------
+# VARIABLES GLOBALES Y FIREBASE
+# -----------------------------------------
+import firebase_admin
+from firebase_admin import credentials, firestore, auth
+
+# --- CONFIGURACIÓN DE LA BASE DE DATOS CENTRAL ---
+COLECCION_VIAJES = "viajes"
+
+# --- CONFIGURACIÓN DE ZONA HORARIA (ARGENTINA UTC-3) ---
+TZ_AR = timezone(timedelta(hours=-3))
 
 # --- DISEÑO CORPORATIVO (CSS) ---
 primary_color = "#1E3A8A"
@@ -89,31 +92,6 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # --- FUNCIONES DE COMUNICACIÓN Y FORMATO ---
-def login_usuario(email, password):
-    url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={API_KEY_FIREBASE}"
-    payload = {
-        "email": email, 
-        "password": password, 
-        "returnSecureToken": True
-    }
-    res = requests.post(url, json=payload)
-    if res.status_code == 200:
-        return res.json()
-    else:
-        return None
-
-def enviar_correo_recuperacion(email):
-    url = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={API_KEY_FIREBASE}"
-    payload = {
-        "requestType": "PASSWORD_RESET", 
-        "email": email
-    }
-    res = requests.post(url, json=payload)
-    if res.status_code == 200:
-        return True
-    else:
-        return False
-
 def obtener_usuarios():
     usuarios_ref = db.collection("usuarios").stream()
     lista_usuarios = []
@@ -279,61 +257,103 @@ if "usuario_actual" not in st.session_state:
 if "paso_actual" not in st.session_state: 
     st.session_state["paso_actual"] = "Menu"
 
-# --- PANTALLA DE ACCESO (LOGIN) ---
+# -----------------------------------------
+# SISTEMA DE LOGIN CORPORATIVO (AUTH0)
+# -----------------------------------------
+
+try:
+    AUTH0_DOMAIN = st.secrets["auth0"]["domain"]
+    CLIENT_ID = st.secrets["auth0"]["client_id"]
+    CLIENT_SECRET = st.secrets["auth0"]["client_secret"]
+except KeyError as e:
+    st.error(f"Falta configurar las credenciales de Auth0: {e}")
+    st.stop()
+
+# IMPORTANTE: URL de redirección.
+REDIRECT_URI = "https://marbar-viajes.streamlit.app/" 
+#REDIRECT_URI = "http://localhost:8501/" # Descomenta esta línea solo para pruebas locales
+
+AUTHORIZE_URL = f"https://{AUTH0_DOMAIN}/authorize"
+TOKEN_URL = f"https://{AUTH0_DOMAIN}/oauth/token"
+USERINFO_URL = f"https://{AUTH0_DOMAIN}/userinfo"
+
 if st.session_state["usuario_actual"] is None:
-    col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
-    with col_logo2:
-        if os.path.exists("logo.png"): 
-            st.image("logo.png", use_column_width=True)
-        else: 
-            st.warning("⚠️ Falta 'logo.png'")
+    
+    query_params = st.query_params
+    
+    if "code" not in query_params:
+        col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
+        with col_logo2:
+            if os.path.exists("logo.png"): 
+                st.image("logo.png", use_column_width=True)
+            else: 
+                st.warning("⚠️ Falta 'logo.png'")
+        
+        st.title("🔒 Acceso Seguro - MARBAR SA")
+        st.info("El acceso a esta plataforma está restringido a personal autorizado. Ingrese mediante el portal corporativo de identidad.")
+        
+        client = OAuth2Session(CLIENT_ID, CLIENT_SECRET, scope="openid profile email")
+        uri, state = client.create_authorization_url(AUTHORIZE_URL, redirect_uri=REDIRECT_URI)
+        
+        st.link_button("🔑 INICIAR SESIÓN CORPORATIVA", uri, use_container_width=True)
+        st.stop() 
+        
+    else:
+        code = query_params["code"]
+        
+        try:
+            client = OAuth2Session(CLIENT_ID, CLIENT_SECRET)
+            token = client.fetch_token(TOKEN_URL, authorization_response=f"{REDIRECT_URI}?code={code}", redirect_uri=REDIRECT_URI)
             
-    st.title("🔒 Acceso Seguro - MARBAR")
-    e_ing = st.text_input("Correo Electrónico:").strip()
-    c_ing = st.text_input("Contraseña:", type="password")
-    
-    col_log1, col_log2 = st.columns(2)
-    
-    with col_log1:
-        if st.button("Iniciar Sesión", use_container_width=True):
-            if e_ing == "admin@marbar.com" and c_ing == "Marbar2026":
+            resp = client.get(USERINFO_URL)
+            user_info = resp.json()
+            correo_auth0 = user_info.get("email", "").lower()
+            
+            # --- COTEJO CON LA BASE DE DATOS DE LA EMPRESA (FIREBASE) ---
+            usuarios_ref = db.collection("usuarios").where("Email", "==", correo_auth0).stream()
+            usuario_encontrado = None
+            for u in usuarios_ref:
+                usuario_encontrado = u.to_dict()
+                break
+            
+            if usuario_encontrado:
+                st.session_state.update({
+                    "usuario_actual": usuario_encontrado.get("Rol", "Chofer"), 
+                    "nombre_empleado": usuario_encontrado.get("Nombre", "Empleado MARBAR"), 
+                    "sector_empleado": usuario_encontrado.get("Sector", "Sin Sector"), 
+                    "regional_empleado": usuario_encontrado.get("Regional", "No asignada"),
+                    "email_empleado": correo_auth0,
+                    "paso_actual": "Menu"
+                })
+                
+                st.query_params.clear()
+                st.rerun()
+                
+            elif correo_auth0 == "admin@marbar.com":
                 st.session_state.update({
                     "usuario_actual": "ADMIN", 
                     "nombre_empleado": "Administrador", 
                     "sector_empleado": "Gerencia", 
                     "regional_empleado": "Sede Central",
-                    "email_empleado": e_ing
+                    "email_empleado": correo_auth0,
+                    "paso_actual": "Menu"
                 })
+                st.query_params.clear()
                 st.rerun()
-            else:
-                login_data = login_usuario(e_ing, c_ing)
-                if login_data:
-                    usuarios_ref = db.collection("usuarios").where("Email", "==", e_ing).limit(1).get()
-                    if usuarios_ref:
-                        p = usuarios_ref[0].to_dict()
-                        st.session_state.update({
-                            "usuario_actual": p["Rol"], 
-                            "nombre_empleado": p["Nombre"], 
-                            "sector_empleado": p["Sector"], 
-                            "regional_empleado": p.get("Regional", "No asignada"),
-                            "email_empleado": e_ing
-                        })
-                        st.rerun()
-                    else: 
-                        st.error("❌ Correo sin perfil en la base MARBAR.")
-                else: 
-                    st.error("❌ Credenciales incorrectas.")
                 
-    with col_log2:
-        if st.button("¿Olvidaste tu contraseña?", use_container_width=True):
-            if e_ing == "":
-                st.warning("⚠️ Por favor, escribe tu correo arriba y vuelve a presionar este botón.")
             else:
-                if enviar_correo_recuperacion(e_ing):
-                    st.success(f"✅ Se ha enviado un enlace seguro a {e_ing} para restablecer tu contraseña.")
-                else:
-                    st.error("❌ No se pudo enviar el correo. Verifica que la dirección esté bien escrita y registrada.")
-    st.stop()
+                st.error(f"⛔ El correo **{correo_auth0}** es válido, pero no tiene un perfil operativo asignado en el Sistema de Viajes. Solicite el alta a la supervisión.")
+                if st.button("⬅️ Volver al Inicio"):
+                    st.query_params.clear()
+                    st.rerun()
+                st.stop()
+                
+        except Exception as e:
+            st.error(f"Ocurrió un error en la validación del ticket corporativo: {e}")
+            if st.button("Intentar de nuevo"):
+                st.query_params.clear()
+                st.rerun()
+            st.stop()
 
 # --- WORKFLOW PRINCIPAL ---
 
@@ -370,7 +390,6 @@ if st.session_state["paso_actual"] == "Menu":
         st.markdown("---")
     
     if st.session_state["usuario_actual"] != "ADMIN":
-        # CORRECCIÓN AQUÍ: Usamos "in" para buscar tanto viajes "En viaje" como "En espera"
         viajes_activos = db.collection(COLECCION_VIAJES).where("Chofer", "==", st.session_state["nombre_empleado"]).where("Estado_Viaje", "in", ["En viaje", "En espera"]).stream()
         lista_activos = []
         for d in viajes_activos:
@@ -379,7 +398,6 @@ if st.session_state["paso_actual"] == "Menu":
         if lista_activos:
             st.info("📍 Estado de su viaje actual:")
             for v in lista_activos:
-                # --- VALIDACIÓN DE ESTADO PARA EL CHOFER ---
                 estado_aprobacion = v.get("Aprobacion", "🔴 Pendiente")
                 
                 if "Aprobado" in estado_aprobacion:
@@ -387,11 +405,9 @@ if st.session_state["paso_actual"] == "Menu":
                 else:
                     st.warning(f"⏳ **ESPERANDO APROBACIÓN (ID {v['ID']})**\n\nSu solicitud de viaje hacia **{v['Destino']}** requiere validación de la supervisión. **No mueva la unidad hasta recibir la autorización en este panel.**")
                 
-                # Columnas para los botones de cierre operativos
                 col_info, col_accion, col_canc = st.columns([1, 1, 1])
                 col_info.write(f"**Gestión ID {v['ID']}**")
                 
-                # BOTÓN: LLEGADA
                 if col_accion.button(f"🏁 Llegar", key=f"menu_fin_{v['ID']}"):
                     db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
                         "Estado_Viaje": "Finalizado", 
@@ -400,7 +416,6 @@ if st.session_state["paso_actual"] == "Menu":
                     st.session_state["alerta_llegada"] = {"id": v['ID'], "destino": v['Destino']}
                     st.rerun()
                     
-                # BOTÓN: CANCELACIÓN
                 if col_canc.button(f"❌ Cancelar", key=f"menu_canc_{v['ID']}"):
                     db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
                         "Estado_Viaje": "Cancelado", 
@@ -748,13 +763,6 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                     st.balloons()
                     
                     if color_semaforo == "green":
-                        cabecera_wa = f"💠 VIAJE AUTO-APROBADO ID {nuevo_id} 💠"
-                        pie_wa = f"👉 Aprobado automáticamente por sistema."
-                    else:
-                        cabecera_wa = f"💠 NUEVA SOLICITUD ID {nuevo_id} 💠"
-                        pie_wa = f"👉 Por favor, apruebe en la plataforma MARBAR."
-
-                    if color_semaforo == "green":
                         cabecera_wa = f"🟢 *VIAJE AUTO-APROBADO ID {nuevo_id}*"
                         pie_wa = f"👉 *Aprobado automáticamente por sistema.*"
                     else:
@@ -795,7 +803,7 @@ elif st.session_state["paso_actual"] == "Historial":
             st.dataframe(df_h[['ID', 'Fecha', 'Origen', 'Destino', 'Estado_Viaje']], hide_index=True, use_container_width=True)
             
             st.markdown("---")
-            st.write("#### 📥 Extraer Ticket TXT")
+            st.write("#### 📥 Extraer Ficha Auditada (PDF/HTML)")
             
             op_dd = [""]
             for _, r in df_h.iterrows():
@@ -832,6 +840,7 @@ with st.sidebar:
             
         if st.button("🚪 Cerrar Sesión", use_container_width=True): 
             st.session_state.clear()
+            st.query_params.clear()
             st.rerun()
 
 try:
@@ -878,7 +887,6 @@ try:
             id_sb = v_sb.split(" - ")[0]
             d_sb = df_sb[df_sb["ID"].astype(str) == id_sb].iloc[0]
             
-            # --- CORRECCIÓN AQUÍ: Llamamos a la nueva función HTML ---
             reporte_sb_html = generar_ficha_html(d_sb)
             st.sidebar.download_button(
                 label="📥 Descargar Ficha PDF", 
@@ -887,9 +895,6 @@ try:
                 mime="text/html",
                 key="btn_sb_txt"
             )
-            
-            reporte_html = generar_ficha_html(d_v)
-            st.download_button("📥 Descargar Ficha PDF", reporte_html, f"MARBAR_Auditoria_{id_ext}.html", mime="text/html")
 
         if st.session_state["usuario_actual"] == "ADMIN":
             st.sidebar.markdown("---")
@@ -975,22 +980,18 @@ if st.session_state["usuario_actual"] == "ADMIN":
     t1, t2 = st.tabs(["👥 Usuarios", "🚘 Flota"])
     
     with t1:
-        st.info("💡 Al crear un usuario, el sistema le enviará un correo automático de Firebase para que configure su propia contraseña personal.")
-        adm_email = st.text_input("Correo Electrónico:").strip()
+        st.info("💡 En este panel puedes gestionar los perfiles de los usuarios en Firebase. Recuerda que la contraseña ya no se usa aquí, sino que se gestiona mediante Auth0.")
+        adm_email = st.text_input("Correo Electrónico Oficial:").strip().lower()
         adm_nombre = st.text_input("Nombre y Apellido Real:").strip()
         adm_dni = st.text_input("DNI:").strip()
         adm_regional = st.text_input("Regional a la que pertenece (Ej: Neuquén, Río Negro):").strip()
         adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia", "Completacion"])
         adm_rol = st.selectbox("Rol:", ["Chofer", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "ADMIN"])
         
-        if st.button("💾 Crear Usuario y Enviar Acceso"):
+        if st.button("💾 Asignar Perfil Operativo"):
             if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
                 
-                caracteres_seguros = string.ascii_letters + string.digits + "!@#$%"
-                password_temporal = "".join(random.choice(caracteres_seguros) for i in range(16))
-                
                 try:
-                    auth.create_user(email=adm_email, password=password_temporal)
                     db.collection("usuarios").document(adm_dni).set({
                         "DNI_Usuario": adm_dni, 
                         "Nombre": adm_nombre, 
@@ -1000,9 +1001,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
                         "Sector": adm_sector
                     })
                     
-                    enviar_correo_recuperacion(adm_email)
-                    
-                    st.success(f"✅ ¡Usuario creado con éxito! Se ha enviado un correo oficial a {adm_email} para que configure su contraseña de forma privada.")
+                    st.success(f"✅ ¡Perfil asignado con éxito! Ahora el usuario podrá ingresar a la aplicación usando su cuenta corporativa Auth0 ({adm_email}).")
                     st.rerun()
                 except Exception as e: 
                     st.error(f"Error de Firebase: {e}")
@@ -1019,7 +1018,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
                 if row.get("Rol") != "ADMIN" and row.get("Email") != "admin@marbar.com":
                     lista_borrar_u.append(row["DNI_Usuario"])
                 
-            elim_u = st.selectbox("Borrar Perfil (DNI):", lista_borrar_u)
+            elim_u = st.selectbox("Borrar Perfil Operativo (DNI):", lista_borrar_u)
             
             if st.button("❌ Dar de Baja"): 
                 if elim_u.strip() != "": 
