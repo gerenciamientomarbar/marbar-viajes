@@ -270,7 +270,7 @@ except KeyError as e:
     st.stop()
 
 # IMPORTANTE: URL de redirección.
-REDIRECT_URI = "https://marbar-viajes.streamlit.app/" 
+REDIRECT_URI = "https://gerenciamientomarbar-marbar-via-app-gerenciamientomarbar-4ol9rm.streamlit.app/"
 #REDIRECT_URI = "http://localhost:8501/" # Descomenta esta línea solo para pruebas locales
 
 AUTHORIZE_URL = f"https://{AUTH0_DOMAIN}/authorize"
