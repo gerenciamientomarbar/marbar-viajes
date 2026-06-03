@@ -13,7 +13,8 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
 # --- NUEVAS LIBRERÍAS PARA AUTH0 ---
-from authlib.integrations.requests_client import OAuth2Session
+import requests
+import jwt
 
 # -----------------------------------------
 # CONFIGURACIÓN DE PÁGINA
@@ -269,9 +270,8 @@ except KeyError as e:
     st.error(f"Falta configurar las credenciales de Auth0: {e}")
     st.stop()
 
-# IMPORTANTE: URL de redirección.
+# IMPORTANTE: URL de redirección oficial.
 REDIRECT_URI = "https://gerenciamientomarbar-marbar-via-app-gerenciamientomarbar-4ol9rm.streamlit.app/"
-#REDIRECT_URI = "http://localhost:8501/" # Descomenta esta línea solo para pruebas locales
 
 AUTHORIZE_URL = f"https://{AUTH0_DOMAIN}/authorize"
 TOKEN_URL = f"https://{AUTH0_DOMAIN}/oauth/token"
@@ -292,8 +292,8 @@ if st.session_state["usuario_actual"] is None:
         st.title("🔒 Acceso Seguro - MARBAR SA")
         st.info("El acceso a esta plataforma está restringido a personal autorizado. Ingrese mediante el portal corporativo de identidad.")
         
-        client = OAuth2Session(CLIENT_ID, CLIENT_SECRET, scope="openid profile email")
-        uri, state = client.create_authorization_url(AUTHORIZE_URL, redirect_uri=REDIRECT_URI)
+        # Generamos la URL de autorización nativa
+        uri = f"{AUTHORIZE_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={urllib.parse.quote(REDIRECT_URI)}&scope=openid%20profile%20email"
         
         st.link_button("🔑 INICIAR SESIÓN CORPORATIVA", uri, use_container_width=True)
         st.stop() 
@@ -302,11 +302,23 @@ if st.session_state["usuario_actual"] is None:
         code = query_params["code"]
         
         try:
-            client = OAuth2Session(CLIENT_ID, CLIENT_SECRET)
-            token = client.fetch_token(TOKEN_URL, authorization_response=f"{REDIRECT_URI}?code={code}", redirect_uri=REDIRECT_URI)
+            # 1. Pedimos el Token de acceso a Auth0 de manera directa
+            payload = {
+                "grant_type": "authorization_code",
+                "client_id": CLIENT_ID,
+                "client_secret": CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": REDIRECT_URI
+            }
+            token_response = requests.post(TOKEN_URL, json=payload)
+            token_data = token_response.json()
             
-            resp = client.get(USERINFO_URL)
-            user_info = resp.json()
+            # 2. Con ese Token, consultamos la identidad del operador
+            access_token = token_data.get("access_token")
+            headers = {'Authorization': f'Bearer {access_token}'}
+            userinfo_response = requests.get(USERINFO_URL, headers=headers)
+            user_info = userinfo_response.json()
+            
             correo_auth0 = user_info.get("email", "").lower()
             
             # --- COTEJO CON LA BASE DE DATOS DE LA EMPRESA (FIREBASE) ---
@@ -349,7 +361,7 @@ if st.session_state["usuario_actual"] is None:
                 st.stop()
                 
         except Exception as e:
-            st.error(f"Ocurrió un error en la validación del ticket corporativo: {e}")
+            st.error(f"Ocurrió un error en la validación corporativa: {e}")
             if st.button("Intentar de nuevo"):
                 st.query_params.clear()
                 st.rerun()
