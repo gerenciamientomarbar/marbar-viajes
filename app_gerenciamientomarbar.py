@@ -496,7 +496,10 @@ elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
         "12. Airbag Operativo (Verificar ausencia de testigo en tablero)",
         "13. Sist. ABS Operativo (Verificar ausencia de testigo en tablero)",
         "14. MVI (GPRS) Operativo",
-        "15. Kit Invernal"
+        "15. Kit Invernal",
+        "16. ¿Los objetos en la caja de carga o en el habitáculo se encuentran asegurados?",
+        "17. ¿Las luces en general del vehículo se encuentran en condiciones?",
+        "18. ¿El estado de los cristales del vehículo es correcto?"
     ]
     respuestas_eq = {}
     for item in eq_items:
