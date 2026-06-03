@@ -495,7 +495,7 @@ elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
         "11. Rueda de Auxilio Operativa",
         "12. Airbag Operativo (Verificar ausencia de testigo en tablero)",
         "13. Sist. ABS Operativo (Verificar ausencia de testigo en tablero)",
-        "14. MVI (GPRS) Operativo",
+        "14. Microtrack Operativo",
         "15. Kit Invernal",
         "16. ¿Los objetos en la caja de carga o en el habitáculo se encuentran asegurados?",
         "17. ¿Las luces en general del vehículo se encuentran en condiciones?",
