@@ -911,7 +911,7 @@ try:
                 key="btn_sb_txt"
             )
 
-        if st.session_state["usuario_actual"] == "ADMIN":
+        if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
             st.sidebar.markdown("---")
             st.sidebar.subheader("📊 Consola Excel")
             
