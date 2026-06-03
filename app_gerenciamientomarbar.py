@@ -84,8 +84,9 @@ st.markdown(f"""
 # --- CONEXIÓN A LA NUBE (FIREBASE) ---
 if not firebase_admin._apps:
     try:
-        llave_secreta = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
-        cred = credentials.Certificate(llave_secreta)
+        # Corrección aplicada aquí para leer correctamente los secretos en formato JSON
+        firebase_secrets = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
+        cred = credentials.Certificate(firebase_secrets)
         firebase_admin.initialize_app(cred)
     except Exception as e:
         st.error(f"Error crítico al conectar con la llave secreta: {e}")
@@ -271,11 +272,19 @@ except KeyError as e:
     st.stop()
 
 # IMPORTANTE: URL de redirección oficial.
-REDIRECT_URI = "https://gerenciamientomarbar-marbar-via-app-gerenciamientomarbar-4ol9rm.streamlit.app/"
+# Detección automática del entorno (Local vs Nube)
+import urllib.parse
 
-AUTHORIZE_URL = f"https://{AUTH0_DOMAIN}/authorize"
-TOKEN_URL = f"https://{AUTH0_DOMAIN}/oauth/token"
-USERINFO_URL = f"https://{AUTH0_DOMAIN}/userinfo"
+if "localhost" in st.query_params.get("host", "localhost") or "127.0.0.1" in st.query_params.get("host", "127.0.0.1"):
+    # Estamos en entorno local de pruebas
+    REDIRECT_URI = "http://localhost:8501/"
+else:
+    # Estamos en la nube oficial
+    REDIRECT_URI = "https://gerenciamientomarbar-marbar-via-app-gerenciamientomarbar-4ol9rm.streamlit.app/"
+
+AUTHORIZE_URL = "https://" + AUTH0_DOMAIN + "/authorize"
+TOKEN_URL = "https://" + AUTH0_DOMAIN + "/oauth/token"
+USERINFO_URL = "https://" + AUTH0_DOMAIN + "/userinfo"
 
 if st.session_state["usuario_actual"] is None:
     
