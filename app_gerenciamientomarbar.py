@@ -854,7 +854,9 @@ with st.sidebar:
         if st.button("🚪 Cerrar Sesión", use_container_width=True): 
             st.session_state.clear()
             st.query_params.clear()
-            st.rerun()
+            # Ordenamos a Auth0 destruir la sesión global y regresar a la app
+            url_salida_auth0 = f"https://{AUTH0_DOMAIN}/v2/logout?client_id={CLIENT_ID}&returnTo={urllib.parse.quote(REDIRECT_URI)}"
+            st.markdown(f'<meta http-equiv="refresh" content="0; url={url_salida_auth0}">', unsafe_allow_html=True)
 
 try:
     viajes_sidebar = db.collection(COLECCION_VIAJES).stream()
