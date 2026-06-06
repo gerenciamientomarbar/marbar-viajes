@@ -46,7 +46,6 @@ st.markdown(f"""
     /* Ocultar elementos por defecto de Streamlit para un look corporativo */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
-    header {{visibility: hidden;}}
     
     .stApp {{ 
         background-color: #F3F4F6; 
