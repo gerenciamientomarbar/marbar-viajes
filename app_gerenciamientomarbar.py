@@ -25,22 +25,6 @@ st.set_page_config(
     page_icon="🚛"
 )
 
-estilo_personalizado = """
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .stButton>button {
-        border-radius: 8px;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        border: 1px solid #4CAF50;
-        color: #4CAF50;
-    }
-    </style>
-"""
-
 # -----------------------------------------
 # VARIABLES GLOBALES Y FIREBASE
 # -----------------------------------------
