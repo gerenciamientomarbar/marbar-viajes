@@ -25,6 +25,13 @@ st.set_page_config(
     page_icon="🚛"
 )
 
+estilo_personalizado = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+"""
 # -----------------------------------------
 # VARIABLES GLOBALES Y FIREBASE
 # -----------------------------------------
