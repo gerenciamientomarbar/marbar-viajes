@@ -43,6 +43,11 @@ text_color = "#1F2937"
 
 st.markdown(f"""
 <style>
+    /* Ocultar elementos por defecto de Streamlit para un look corporativo */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+    
     .stApp {{ 
         background-color: #F3F4F6; 
     }}
@@ -84,7 +89,6 @@ st.markdown(f"""
 # --- CONEXIÓN A LA NUBE (FIREBASE) ---
 if not firebase_admin._apps:
     try:
-        # Corrección aplicada aquí para leer correctamente los secretos en formato JSON
         firebase_secrets = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
         cred = credentials.Certificate(firebase_secrets)
         firebase_admin.initialize_app(cred)
@@ -272,7 +276,11 @@ except KeyError as e:
     st.stop()
 
 # IMPORTANTE: URL de redirección oficial.
-REDIRECT_URI = "https://gerenciamientomarbar-marbar-via-app-gerenciamientomarbar-4ol9rm.streamlit.app/"
+# Detección automática del entorno (Local vs Nube)
+if "localhost" in st.query_params.get("host", "localhost") or "127.0.0.1" in st.query_params.get("host", "127.0.0.1"):
+    REDIRECT_URI = "http://localhost:8501/"
+else:
+    REDIRECT_URI = "https://gerenciamientomarbar-marbar-via-app-gerenciamientomarbar-4ol9rm.streamlit.app/"
 
 AUTHORIZE_URL = "https://" + AUTH0_DOMAIN + "/authorize"
 TOKEN_URL = "https://" + AUTH0_DOMAIN + "/oauth/token"
@@ -411,31 +419,32 @@ if st.session_state["paso_actual"] == "Menu":
         if lista_activos:
             st.info("📍 Estado de su viaje actual:")
             for v in lista_activos:
-                estado_aprobacion = v.get("Aprobacion", "🔴 Pendiente")
-                
-                if "Aprobado" in estado_aprobacion:
-                    st.success(f"🚀 **VIAJE AUTORIZADO (ID {v['ID']})**\n\nEl supervisor ya firmó digitalmente. Está habilitado para iniciar la marcha hacia **{v['Destino']}** de forma segura.")
-                else:
-                    st.warning(f"⏳ **ESPERANDO APROBACIÓN (ID {v['ID']})**\n\nSu solicitud de viaje hacia **{v['Destino']}** requiere validación de la supervisión. **No mueva la unidad hasta recibir la autorización en este panel.**")
-                
-                col_info, col_accion, col_canc = st.columns([1, 1, 1])
-                col_info.write(f"**Gestión ID {v['ID']}**")
-                
-                if col_accion.button(f"🏁 Llegar", key=f"menu_fin_{v['ID']}"):
-                    db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
-                        "Estado_Viaje": "Finalizado", 
-                        "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
-                    })
-                    st.session_state["alerta_llegada"] = {"id": v['ID'], "destino": v['Destino']}
-                    st.rerun()
+                with st.container(border=True): # <-- IMPLEMENTACIÓN DE TARJETAS VISUALES
+                    estado_aprobacion = v.get("Aprobacion", "🔴 Pendiente")
                     
-                if col_canc.button(f"❌ Cancelar", key=f"menu_canc_{v['ID']}"):
-                    db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
-                        "Estado_Viaje": "Cancelado", 
-                        "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
-                    })
-                    st.session_state["alerta_cancelacion"] = {"id": v['ID'], "destino": v['Destino']}
-                    st.rerun()
+                    if "Aprobado" in estado_aprobacion:
+                        st.success(f"🚀 **VIAJE AUTORIZADO (ID {v['ID']})**\n\nEl supervisor ya firmó digitalmente. Está habilitado para iniciar la marcha hacia **{v['Destino']}** de forma segura.")
+                    else:
+                        st.warning(f"⏳ **ESPERANDO APROBACIÓN (ID {v['ID']})**\n\nSu solicitud de viaje hacia **{v['Destino']}** requiere validación de la supervisión. **No mueva la unidad hasta recibir la autorización en este panel.**")
+                    
+                    col_info, col_accion, col_canc = st.columns([1, 1, 1])
+                    col_info.write(f"**Gestión ID {v['ID']}**")
+                    
+                    if col_accion.button(f"🏁 Llegar", key=f"menu_fin_{v['ID']}"):
+                        db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
+                            "Estado_Viaje": "Finalizado", 
+                            "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
+                        })
+                        st.session_state["alerta_llegada"] = {"id": v['ID'], "destino": v['Destino']}
+                        st.rerun()
+                        
+                    if col_canc.button(f"❌ Cancelar", key=f"menu_canc_{v['ID']}"):
+                        db.collection(COLECCION_VIAJES).document(str(v['ID'])).update({
+                            "Estado_Viaje": "Cancelado", 
+                            "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
+                        })
+                        st.session_state["alerta_cancelacion"] = {"id": v['ID'], "destino": v['Destino']}
+                        st.rerun()
 
     st.markdown("---")
     col_menu1, col_menu2 = st.columns(2)
@@ -932,6 +941,14 @@ try:
             
             # --- CÁLCULO DE DURACIÓN REAL EN EXCEL ---
             df_ex['Duracion_Real_Viaje'] = df_ex.apply(lambda r: calcular_duracion_real(r.get('Fecha', ''), r.get('Fecha_Fin', '')), axis=1)
+            
+            # --- IMPLEMENTACIÓN DE MÉTRICAS EN LA CONSOLA ADMIN (Solo si es ADMIN para no recargar otras vistas) ---
+            if st.session_state["usuario_actual"] == "ADMIN":
+                st.sidebar.markdown("---")
+                st.sidebar.subheader("📈 Resumen de Operaciones")
+                col_met1, col_met2 = st.sidebar.columns(2)
+                col_met1.metric("Viajes Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pendientes" if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
+                col_met2.metric("En Ruta", str(len(df_r)))
             
             # --- CREACIÓN DEL EXCEL EN FORMATO TABLA (CON DISEÑO OPENPYXL) ---
             bx = io.BytesIO()
