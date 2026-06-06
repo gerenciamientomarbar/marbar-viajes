@@ -276,11 +276,7 @@ except KeyError as e:
     st.stop()
 
 # IMPORTANTE: URL de redirección oficial.
-# Detección automática del entorno (Local vs Nube)
-if "localhost" in st.query_params.get("host", "localhost") or "127.0.0.1" in st.query_params.get("host", "127.0.0.1"):
-    REDIRECT_URI = "http://localhost:8501/"
-else:
-    REDIRECT_URI = "https://gerenciamientomarbar-marbar-via-app-gerenciamientomarbar-4ol9rm.streamlit.app/"
+REDIRECT_URI = "https://gerenciamientomarbar-marbar-via-app-gerenciamientomarbar-4ol9rm.streamlit.app/"
 
 AUTHORIZE_URL = "https://" + AUTH0_DOMAIN + "/authorize"
 TOKEN_URL = "https://" + AUTH0_DOMAIN + "/oauth/token"
