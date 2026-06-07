@@ -468,8 +468,28 @@ if st.session_state["paso_actual"] == "Menu":
     col_menu1, col_menu2 = st.columns(2)
     with col_menu1:
         if st.button("🚀 NUEVO GERENCIAMIENTO DE VIAJE", use_container_width=True): 
-            st.session_state["paso_actual"] = "Test_Chofer"
-            st.rerun()
+            # --- BLOQUEO ESTRICTO POR DOCUMENTACIÓN VENCIDA ---
+            documentacion_vencida = False
+            if st.session_state["usuario_actual"] != "ADMIN":
+                v_lic = st.session_state.get("venc_licencia", "N/A")
+                v_def = st.session_state.get("venc_defensiva", "N/A")
+                hoy_dt = datetime.now(TZ_AR).date()
+                
+                for fecha_str in [v_lic, v_def]:
+                    if fecha_str and fecha_str != "N/A":
+                        try:
+                            fecha_venc = datetime.strptime(fecha_str, "%d/%m/%Y").date()
+                            if (fecha_venc - hoy_dt).days < 0:
+                                documentacion_vencida = True
+                                break
+                        except Exception:
+                            pass
+                            
+            if documentacion_vencida:
+                st.error("⛔ **ACCESO DENEGADO:** Tiene documentación habilitante vencida. Por normativas de seguridad, el sistema bloqueó la creación de nuevos viajes. Regularice su situación con la supervisión.")
+            else:
+                st.session_state["paso_actual"] = "Test_Chofer"
+                st.rerun()
             
     with col_menu2:
         if st.button("📜 VER MI HISTORIAL", use_container_width=True): 
