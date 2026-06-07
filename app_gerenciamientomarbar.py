@@ -983,6 +983,16 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / I
     st.markdown("---")
     st.title("📥 Bandeja de Validaciones")
     
+    # Mapeo de autoridad para validación estricta
+    mapa_autoridad = {
+        "Chofer": 0, 
+        "Supervisor / Coordinador / Ingeniero": 1, 
+        "Jefe de Servicio": 2, 
+        "Gerencia": 3, 
+        "ADMIN": 3
+    }
+    mi_nivel = mapa_autoridad.get(st.session_state["usuario_actual"], 0)
+    
     try:
         solicitudes_pendientes = db.collection(COLECCION_VIAJES).where("Aprobacion", "==", "🔴 Pendiente").stream()
         p_list = []
@@ -991,16 +1001,23 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / I
             
         if p_list:
             for v_p in p_list:
-                with st.expander(f"🚨 ID: {v_p['ID']} | Conductor: {v_p['Chofer']}"):
+                nivel_viaje = v_p.get("Nivel", 1)
+                
+                with st.expander(f"🚨 ID: {v_p['ID']} | Conductor: {v_p['Chofer']} | Riesgo Nivel {nivel_viaje}"):
                     st.write(f"**Ruta:** {v_p['Origen']} -> {v_p['Destino']} ({v_p['Puntaje']} pts)")
-                    if st.button(f"✍️ Aprobar {v_p['ID']}", key=f"btn_ap_{v_p['ID']}"):
-                        db.collection(COLECCION_VIAJES).document(str(v_p['ID'])).update({
-                            "Aprobacion": "🟢 Aprobado", 
-                            "Aprobador": st.session_state["nombre_empleado"], 
-                            "Fecha_Aprobacion": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S"), 
-                            "Estado_Viaje": "En viaje"
-                        })
-                        st.rerun()
+                    
+                    # Control de acceso: Verificar si el usuario tiene la jerarquía necesaria
+                    if mi_nivel >= nivel_viaje:
+                        if st.button(f"✍️ Aprobar {v_p['ID']}", key=f"btn_ap_{v_p['ID']}"):
+                            db.collection(COLECCION_VIAJES).document(str(v_p['ID'])).update({
+                                "Aprobacion": "🟢 Aprobado", 
+                                "Aprobador": st.session_state["nombre_empleado"], 
+                                "Fecha_Aprobacion": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S"), 
+                                "Estado_Viaje": "En viaje"
+                            })
+                            st.rerun()
+                    else:
+                        st.error(f"🔒 Usted es {st.session_state['usuario_actual']} (Nivel {mi_nivel}). Este gerenciamiento exige firma de Nivel {nivel_viaje}.")
         else: 
             st.info("✅ Bandeja limpia.")
             
