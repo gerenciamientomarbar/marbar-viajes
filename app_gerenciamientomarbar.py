@@ -274,7 +274,7 @@ except KeyError as e:
     st.error(f"Falta configurar las credenciales de Auth0: {e}")
     st.stop()
 
-# IMPORTANTE: URL de redirección oficial.
+# IMPORTANTE: URL de redirección oficial para producción fija en la nube.
 REDIRECT_URI = "https://gerenciamientomarbar-marbar-via-app-gerenciamientomarbar-4ol9rm.streamlit.app/"
 
 AUTHORIZE_URL = "https://" + AUTH0_DOMAIN + "/authorize"
@@ -338,6 +338,8 @@ if st.session_state["usuario_actual"] is None:
                     "nombre_empleado": usuario_encontrado.get("Nombre", "Empleado MARBAR"), 
                     "sector_empleado": usuario_encontrado.get("Sector", "Sin Sector"), 
                     "regional_empleado": usuario_encontrado.get("Regional", "No asignada"),
+                    "venc_licencia": usuario_encontrado.get("Venc_Licencia", "N/A"),
+                    "venc_defensiva": usuario_encontrado.get("Venc_Defensiva", "N/A"),
                     "email_empleado": correo_auth0,
                     "paso_actual": "Menu"
                 })
@@ -351,6 +353,8 @@ if st.session_state["usuario_actual"] is None:
                     "nombre_empleado": "Administrador", 
                     "sector_empleado": "Gerencia", 
                     "regional_empleado": "Sede Central",
+                    "venc_licencia": "N/A",
+                    "venc_defensiva": "N/A",
                     "email_empleado": correo_auth0,
                     "paso_actual": "Menu"
                 })
@@ -376,6 +380,25 @@ if st.session_state["usuario_actual"] is None:
 # 1. MENÚ PRINCIPAL
 if st.session_state["paso_actual"] == "Menu":
     st.subheader(f"Panel Operativo - Bienvenido, {st.session_state['nombre_empleado']}")
+    
+    # --- SISTEMA DE ALERTA PROACTIVA DE VENCIMIENTOS DOCUMENTALES ---
+    if st.session_state["usuario_actual"] != "ADMIN":
+        v_lic = st.session_state.get("venc_licencia", "N/A")
+        v_def = st.session_state.get("venc_defensiva", "N/A")
+        hoy_dt = datetime.now(TZ_AR).date()
+        
+        for tipo_doc, fecha_str in [("Carnet de Manejo", v_lic), ("Curso de Conducción Defensiva", v_def)]:
+            if fecha_str and fecha_str != "N/A":
+                try:
+                    fecha_venc = datetime.strptime(fecha_str, "%d/%m/%Y").date()
+                    dias_restantes = (fecha_venc - hoy_dt).days
+                    
+                    if dias_restantes < 0:
+                        st.error(f"🚨 **VENCIMIENTO CRÍTICO:** Su **{tipo_doc}** caducó hace {abs(dias_restantes)} días ({fecha_str}). Gestione la renovación de forma urgente para regularizar su estado operativo.")
+                    elif dias_restantes <= 30:
+                        st.warning(f"⚠️ **AVISO DE VENCIMIENTO:** Su **{tipo_doc}** vencerá en {dias_restantes} días ({fecha_str}). Recuerde coordinar los exámenes y cursos correspondientes.")
+                except Exception:
+                    pass
     
     # --- AVISO WHATSAPP DE LLEGADA A DESTINO ---
     if "alerta_llegada" in st.session_state:
@@ -414,7 +437,7 @@ if st.session_state["paso_actual"] == "Menu":
         if lista_activos:
             st.info("📍 Estado de su viaje actual:")
             for v in lista_activos:
-                with st.container(border=True): # <-- IMPLEMENTACIÓN DE TARJETAS VISUALES
+                with st.container(border=True):
                     estado_aprobacion = v.get("Aprobacion", "🔴 Pendiente")
                     
                     if "Aprobado" in estado_aprobacion:
@@ -482,7 +505,7 @@ elif st.session_state["paso_actual"] == "Test_Chofer":
 # 3. INSPECCIÓN VEHÍCULO
 elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
     st.warning("⚖️ **DECLARACIÓN JURADA:** La información ingresada en este gerenciamiento reviste carácter de Declaración Jurada. Cualquier omisión o falsedad sobre su estado o el del vehículo constituye una falta grave a las normativas de seguridad (SSA).")
-    st.subheader("🚘 Paso 2: Condiciones del Vehículo")
+    st.subheader("🚘 Paso 2: Conditions del Vehículo")
     
     st.markdown("#### A. Equipamiento y Estado Técnico")
     eq_items = [
@@ -766,7 +789,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                     "Aprobacion": aprobacion_db, 
                     "Aprobador": aprobador_db, 
                     "Fecha_Aprobacion": fecha_aprobacion_db, 
-                    "Estado_Viaje": estado_viaje_db, 
+                    "Estado_Viaje": state_viaje_db, 
                     "Fecha_Fin": "En curso", 
                     "Test_Chofer": st.session_state.get("test_chofer"), 
                     "Inspeccion_Vehiculo": st.session_state.get("inspeccion_vehiculo"), 
@@ -865,7 +888,6 @@ with st.sidebar:
         if st.button("🚪 Cerrar Sesión", use_container_width=True): 
             st.session_state.clear()
             st.query_params.clear()
-            # Ordenamos a Auth0 destruir la sesión global y regresar a la app
             url_salida_auth0 = f"https://{AUTH0_DOMAIN}/v2/logout?client_id={CLIENT_ID}&returnTo={urllib.parse.quote(REDIRECT_URI)}"
             st.markdown(f'<meta http-equiv="refresh" content="0; url={url_salida_auth0}">', unsafe_allow_html=True)
 
@@ -941,7 +963,7 @@ try:
             # --- CÁLCULO DE DURACIÓN REAL EN EXCEL ---
             df_ex['Duracion_Real_Viaje'] = df_ex.apply(lambda r: calcular_duracion_real(r.get('Fecha', ''), r.get('Fecha_Fin', '')), axis=1)
             
-            # --- IMPLEMENTACIÓN DE MÉTRICAS EN LA CONSOLA ADMIN (Solo si es ADMIN para no recargar otras vistas) ---
+            # --- IMPLEMENTACIÓN DE MÉTRICAS EN LA CONSOLA ADMIN ---
             if st.session_state["usuario_actual"] == "ADMIN":
                 st.sidebar.markdown("---")
                 st.sidebar.subheader("📈 Resumen de Operaciones")
@@ -983,7 +1005,6 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / I
     st.markdown("---")
     st.title("📥 Bandeja de Validaciones")
     
-    # Mapeo de autoridad para validación estricta
     mapa_autoridad = {
         "Chofer": 0, 
         "Supervisor / Coordinador / Ingeniero": 1, 
@@ -1006,7 +1027,6 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / I
                 with st.expander(f"🚨 ID: {v_p['ID']} | Conductor: {v_p['Chofer']} | Riesgo Nivel {nivel_viaje}"):
                     st.write(f"**Ruta:** {v_p['Origen']} -> {v_p['Destino']} ({v_p['Puntaje']} pts)")
                     
-                    # Control de acceso: Verificar si el usuario tiene la jerarquía necesaria
                     if mi_nivel >= nivel_viaje:
                         if st.button(f"✍️ Aprobar {v_p['ID']}", key=f"btn_ap_{v_p['ID']}"):
                             db.collection(COLECCION_VIAJES).document(str(v_p['ID'])).update({
@@ -1039,6 +1059,13 @@ if st.session_state["usuario_actual"] == "ADMIN":
         adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia", "Completacion"])
         adm_rol = st.selectbox("Rol:", ["Chofer", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "ADMIN"])
         
+        # --- NUEVOS SELECTORES PARA CONTROL DE VENCIMIENTO DOCUMENTAL ---
+        col_v1, col_v2 = st.columns(2)
+        with col_v1:
+            adm_venc_lic = st.date_input("Vencimiento Carnet de Manejo:", value=datetime.now(TZ_AR).date())
+        with col_v2:
+            adm_venc_def = st.date_input("Vencimiento Conducción Defensiva:", value=datetime.now(TZ_AR).date())
+        
         if st.button("💾 Asignar Perfil Operativo"):
             if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
                 
@@ -1049,7 +1076,9 @@ if st.session_state["usuario_actual"] == "ADMIN":
                         "Email": adm_email, 
                         "Regional": adm_regional,
                         "Rol": adm_rol, 
-                        "Sector": adm_sector
+                        "Sector": adm_sector,
+                        "Venc_Licencia": adm_venc_lic.strftime("%d/%m/%Y"),
+                        "Venc_Defensiva": adm_venc_def.strftime("%d/%m/%Y")
                     })
                     
                     st.success(f"✅ ¡Perfil asignado con éxito! Ahora el usuario podrá ingresar a la aplicación usando su cuenta corporativa Auth0 ({adm_email}).")
@@ -1063,7 +1092,6 @@ if st.session_state["usuario_actual"] == "ADMIN":
         if not df_u.empty:
             st.dataframe(df_u, hide_index=True)
             
-            # --- FILTRO DE SEGURIDAD: PROTEGER AL ADMIN DE SER ELIMINADO ---
             lista_borrar_u = [""]
             for index, row in df_u.iterrows():
                 if row.get("Rol") != "ADMIN" and row.get("Email") != "admin@marbar.com":
