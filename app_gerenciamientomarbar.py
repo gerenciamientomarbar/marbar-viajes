@@ -667,6 +667,10 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
         nivel_riesgo_calculado = 2
     elif puntos_totales > 30:
         nivel_riesgo_calculado = 3
+        
+    # --- REGLA ESTRICTA DE SEGURIDAD ---
+    if salida_tipo == "Urgencia" and v_horario == "Nocturno":
+        nivel_riesgo_calculado = 3
     
     if nivel_aprobacion_usuario >= nivel_riesgo_calculado:
         color_semaforo = "green"
