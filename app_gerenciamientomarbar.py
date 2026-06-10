@@ -213,6 +213,7 @@ def generar_ficha_html(v_data):
         <table class="tbl">
             <tr><th>Conductor</th><td>{v_data.get('Chofer')}</td><th>Unidad</th><td>{v_data.get('Vehiculo')}</td></tr>
             <tr><th>Sector/Cargo</th><td>{v_data.get('Sector')} / {v_data.get('Cargo')}</td><th>Regional</th><td>{v_data.get('Regional')}</td></tr>
+            <tr><th>Fecha Confección</th><td colspan="3">{v_data.get('Fecha')}</td></tr>
         </table>
 
         <h2>2. RUTA Y TIEMPOS</h2>
@@ -525,7 +526,7 @@ elif st.session_state["paso_actual"] == "Test_Chofer":
 # 3. INSPECCIÓN VEHÍCULO
 elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
     st.warning("⚖️ **DECLARACIÓN JURADA:** La información ingresada en este gerenciamiento reviste carácter de Declaración Jurada. Cualquier omisión o falsedad sobre su estado o el del vehículo constituye una falta grave a las normativas de seguridad (SSA).")
-    st.subheader("🚘 Paso 2: Conditions del Vehículo")
+    st.subheader("🚘 Paso 2: Condiciones del Vehículo")
     
     st.markdown("#### A. Equipamiento y Estado Técnico")
     eq_items = [
@@ -618,6 +619,25 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
         opciones_flota = ["⚠️ Cargar flota en Admin"]
         
     vehiculo_sel = st.selectbox("Unidad:", opciones_flota)
+
+    # --- VALIDACIÓN DE DOCUMENTACIÓN DEL VEHÍCULO ---
+    vehiculo_inhabilitado = False
+    if vehiculo_sel != "⚠️ Cargar flota en Admin" and not df_flota.empty:
+        datos_vehiculo = df_flota[df_flota["Vehiculo"] == vehiculo_sel].iloc[0]
+        v_vtv = datos_vehiculo.get("Venc_VTV", "N/A")
+        v_seg = datos_vehiculo.get("Venc_Seguro", "N/A")
+        hoy_dt = datetime.now(TZ_AR).date()
+        
+        for doc_name, doc_date in [("VTV", v_vtv), ("Seguro", v_seg)]:
+            if doc_date and doc_date != "N/A":
+                try:
+                    fecha_v = datetime.strptime(doc_date, "%d/%m/%Y").date()
+                    if (fecha_v - hoy_dt).days < 0:
+                        vehiculo_inhabilitado = True
+                        st.error(f"🚨 **UNIDAD INHABILITADA:** El vehículo seleccionado tiene el **{doc_name}** vencido desde el {doc_date}. Por normativas de seguridad, no puede iniciar la marcha con este equipo.")
+                        break
+                except Exception:
+                    pass
 
     with st.expander("\U0001F5FA CONSULTA MAPA DE YACIMIENTOS", expanded=True):
         components.iframe("https://www.google.com/maps/d/u/2/embed?mid=1BPDw99m6vQAC09Kdbw9Onaj5mu-blw4&ehbc=2E312F", height=480)
@@ -752,8 +772,10 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                 origen_txt.strip() != "", 
                 destino_txt.strip() != "", 
                 duracion_valida,
-                vehiculo_sel != "⚠️ Cargar flota en Admin", 
+                vehiculo_sel != "⚠️ Cargar flota en Admin",
+                not vehiculo_inhabilitado, # <--- CANDADO ACTIVADO
                 salida_tipo is not None, 
+                # ... (siguen los demás) 
                 v_distancia is not None, 
                 v_clima is not None, 
                 v_pasajeros is not None, 
@@ -809,7 +831,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                     "Aprobacion": aprobacion_db, 
                     "Aprobador": aprobador_db, 
                     "Fecha_Aprobacion": fecha_aprobacion_db, 
-                    "Estado_Viaje": state_viaje_db, 
+                    "Estado_Viaje": estado_viaje_db, 
                     "Fecha_Fin": "En curso", 
                     "Test_Chofer": st.session_state.get("test_chofer"), 
                     "Inspeccion_Vehiculo": st.session_state.get("inspeccion_vehiculo"), 
@@ -893,13 +915,12 @@ elif st.session_state["paso_actual"] == "Historial":
         st.rerun()
 
 # --- 6. SIDEBAR ---
-with st.sidebar:
-    if os.path.exists("logo.png"): 
-        st.image("logo.png", use_column_width=True)
-        
-    st.header("📊 SSA & Logística")
-    
-    if st.session_state["usuario_actual"]:
+if st.session_state["usuario_actual"]:
+    with st.sidebar:
+        if os.path.exists("logo.png"): 
+            st.image("logo.png", use_column_width=True)
+            
+        st.header("📊 SSA & Logística")
         
         # --- BOTÓN DE ACTUALIZACIÓN (NO PIERDE LA SESIÓN) ---
         if st.button("🔄 Actualizar Pantalla", use_container_width=True):
@@ -911,114 +932,122 @@ with st.sidebar:
             url_salida_auth0 = f"https://{AUTH0_DOMAIN}/v2/logout?client_id={CLIENT_ID}&returnTo={urllib.parse.quote(REDIRECT_URI)}"
             st.markdown(f'<meta http-equiv="refresh" content="0; url={url_salida_auth0}">', unsafe_allow_html=True)
 
-try:
-    viajes_sidebar = db.collection(COLECCION_VIAJES).stream()
-    lista_sidebar = []
-    for d in viajes_sidebar:
-        lista_sidebar.append(d.to_dict())
+    try:
+        viajes_sidebar = db.collection(COLECCION_VIAJES).stream()
+        lista_sidebar = []
+        for d in viajes_sidebar:
+            lista_sidebar.append(d.to_dict())
+            
+        df_sb = pd.DataFrame(lista_sidebar)
         
-    df_sb = pd.DataFrame(lista_sidebar)
-    
-    if not df_sb.empty:
-        hoy = datetime.now(TZ_AR).strftime("%d/%m/%Y")
-        df_hoy = df_sb[df_sb['Fecha'].str.contains(hoy, na=False)]
-        
-        st.sidebar.markdown("---")
-        st.sidebar.write("⚠️ **Pendientes (Hoy):**")
-        df_p = df_hoy[df_hoy['Aprobacion'].str.contains("Pendiente", na=False)]
-        
-        if not df_p.empty:
-            st.sidebar.dataframe(df_p[['Chofer', 'Destino']], hide_index=True)
-        else:
-            st.sidebar.write("✅ Al día.")
+        if not df_sb.empty:
+            hoy = datetime.now(TZ_AR).strftime("%d/%m/%Y")
+            df_hoy = df_sb[df_sb['Fecha'].str.contains(hoy, na=False)]
             
-        st.sidebar.markdown("---")
-        st.sidebar.write("🚚 **En Ruta:**")
-        df_r = df_sb[df_sb['Estado_Viaje'] == "En viaje"]
-        
-        if not df_r.empty:
-            st.sidebar.dataframe(df_r[['Chofer', 'Destino']], hide_index=True)
-        else:
-            st.sidebar.write("✅ Ninguna.")
-
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("📜 Ficha Rápida")
-        
-        df_sb_ord = df_sb.sort_values(by="ID", ascending=False)
-        op_sb = [""]
-        for _, r in df_sb_ord.iterrows():
-            op_sb.append(f"{r['ID']} - {r.get('Chofer','')}")
+            with st.sidebar:
+                st.markdown("---")
+                st.write("⚠️ **Pendientes (Hoy):**")
+            df_p = df_hoy[df_hoy['Aprobacion'].str.contains("Pendiente", na=False)]
             
-        v_sb = st.sidebar.selectbox("Buscar ID:", op_sb, key="sb_aud")
-        
-        if v_sb != "":
-            id_sb = v_sb.split(" - ")[0]
-            d_sb = df_sb[df_sb["ID"].astype(str) == id_sb].iloc[0]
-            
-            reporte_sb_html = generar_ficha_html(d_sb)
-            st.sidebar.download_button(
-                label="📥 Descargar Ficha PDF", 
-                data=reporte_sb_html, 
-                file_name=f"MARBAR_Auditoria_{id_sb}.html", 
-                mime="text/html",
-                key="btn_sb_txt"
-            )
-
-        if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
-            st.sidebar.markdown("---")
-            st.sidebar.subheader("📊 Consola Excel")
-            
-            cols = [
-                'ID', 'Regional', 'Fecha', 'Chofer', 'Sector', 'Cargo', 'Vehiculo', 'Duracion', 
-                'Salida', 'Alarma Nocturna', 'Origen', 'Destino', 'Estado', 'Puntaje', 
-                'Nivel', 'Aprobacion', 'Aprobador', 'Fecha_Aprobacion', 'Estado_Viaje', 'Fecha_Fin'
-            ]
-            
-            for c in cols: 
-                if c not in df_sb.columns: 
-                    df_sb[c] = "N/A"
-                    
-            df_ex = df_sb[cols].sort_values(by="ID", ascending=False).copy()
-            
-            # --- CÁLCULO DE DURACIÓN REAL EN EXCEL ---
-            df_ex['Duracion_Real_Viaje'] = df_ex.apply(lambda r: calcular_duracion_real(r.get('Fecha', ''), r.get('Fecha_Fin', '')), axis=1)
-            
-            # --- IMPLEMENTACIÓN DE MÉTRICAS EN LA CONSOLA ADMIN ---
-            if st.session_state["usuario_actual"] == "ADMIN":
-                st.sidebar.markdown("---")
-                st.sidebar.subheader("📈 Resumen de Operaciones")
-                col_met1, col_met2 = st.sidebar.columns(2)
-                col_met1.metric("Viajes Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pendientes" if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
-                col_met2.metric("En Ruta", str(len(df_r)))
-            
-            # --- CREACIÓN DEL EXCEL EN FORMATO TABLA (CON DISEÑO OPENPYXL) ---
-            bx = io.BytesIO()
-            with pd.ExcelWriter(bx, engine='openpyxl') as wr: 
-                df_ex.to_excel(wr, index=False, sheet_name='Auditoria_Viajes')
-                worksheet = wr.sheets['Auditoria_Viajes']
+            if not df_p.empty:
+                st.sidebar.dataframe(df_p[['Chofer', 'Destino']], hide_index=True)
+            else:
+                st.sidebar.write("✅ Al día.")
                 
-                filas = worksheet.max_row
-                columnas = worksheet.max_column
+            with st.sidebar:
+                st.markdown("---")
+                st.write("🚚 **En Ruta:**")
+            df_r = df_sb[df_sb['Estado_Viaje'] == "En viaje"]
+            
+            if not df_r.empty:
+                st.sidebar.dataframe(df_r[['Chofer', 'Destino']], hide_index=True)
+            else:
+                st.sidebar.write("✅ Ninguna.")
+
+            with st.sidebar:
+                st.markdown("---")
+                st.subheader("📜 Ficha Rápida")
+            
+            df_sb_ord = df_sb.sort_values(by="ID", ascending=False)
+            op_sb = [""]
+            for _, r in df_sb_ord.iterrows():
+                op_sb.append(f"{r['ID']} - {r.get('Chofer','')}")
                 
-                if filas > 1:
-                    letra_final = get_column_letter(columnas)
-                    rango_tabla = f"A1:{letra_final}{filas}"
-                    
-                    tabla = Table(displayName="TablaAuditoria", ref=rango_tabla)
-                    estilo = TableStyleInfo(
-                        name="TableStyleMedium9", 
-                        showFirstColumn=False, 
-                        showLastColumn=False, 
-                        showRowStripes=True, 
-                        showColumnStripes=False
+            with st.sidebar:
+                v_sb = st.selectbox("Buscar ID:", op_sb, key="sb_aud")
+            
+            if v_sb != "":
+                id_sb = v_sb.split(" - ")[0]
+                d_sb = df_sb[df_sb["ID"].astype(str) == id_sb].iloc[0]
+                
+                reporte_sb_html = generar_ficha_html(d_sb)
+                with st.sidebar:
+                    st.download_button(
+                        label="📥 Descargar Ficha PDF", 
+                        data=reporte_sb_html, 
+                        file_name=f"MARBAR_Auditoria_{id_sb}.html", 
+                        mime="text/html",
+                        key="btn_sb_txt"
                     )
-                    tabla.tableStyleInfo = estilo
-                    worksheet.add_table(tabla)
+
+            if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
+                with st.sidebar:
+                    st.markdown("---")
+                    st.subheader("📊 Consola Excel")
                 
-            st.sidebar.download_button("📥 Auditoría (Excel)", bx.getvalue(), f"Auditoria_MARBAR_{hoy.replace('/','-')}.xlsx", key="btn_ex")
-            
-except Exception as e_sidebar: 
-    pass
+                cols = [
+                    'ID', 'Regional', 'Fecha', 'Chofer', 'Sector', 'Cargo', 'Vehiculo', 'Duracion', 
+                    'Salida', 'Alarma Nocturna', 'Origen', 'Destino', 'Estado', 'Puntaje', 
+                    'Nivel', 'Aprobacion', 'Aprobador', 'Fecha_Aprobacion', 'Estado_Viaje', 'Fecha_Fin'
+                ]
+                
+                for c in cols: 
+                    if c not in df_sb.columns: 
+                        df_sb[c] = "N/A"
+                        
+                df_ex = df_sb[cols].sort_values(by="ID", ascending=False).copy()
+                
+                # --- CÁLCULO DE DURACIÓN REAL EN EXCEL ---
+                df_ex['Duracion_Real_Viaje'] = df_ex.apply(lambda r: calcular_duracion_real(r.get('Fecha', ''), r.get('Fecha_Fin', '')), axis=1)
+                
+                # --- IMPLEMENTACIÓN DE MÉTRICAS EN LA CONSOLA ADMIN ---
+                if st.session_state["usuario_actual"] == "ADMIN":
+                    with st.sidebar:
+                        st.markdown("---")
+                        st.subheader("📈 Resumen de Operaciones")
+                        col_met1, col_met2 = st.columns(2)
+                        col_met1.metric("Viajes Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pendientes" if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
+                        col_met2.metric("En Ruta", str(len(df_r)))
+                
+                # --- CREACIÓN DEL EXCEL EN FORMATO TABLA (CON DISEÑO OPENPYXL) ---
+                bx = io.BytesIO()
+                with pd.ExcelWriter(bx, engine='openpyxl') as wr: 
+                    df_ex.to_excel(wr, index=False, sheet_name='Auditoria_Viajes')
+                    worksheet = wr.sheets['Auditoria_Viajes']
+                    
+                    filas = worksheet.max_row
+                    columnas = worksheet.max_column
+                    
+                    if filas > 1:
+                        letra_final = get_column_letter(columnas)
+                        rango_tabla = f"A1:{letra_final}{filas}"
+                        
+                        tabla = Table(displayName="TablaAuditoria", ref=rango_tabla)
+                        estilo = TableStyleInfo(
+                            name="TableStyleMedium9", 
+                            showFirstColumn=False, 
+                            showLastColumn=False, 
+                            showRowStripes=True, 
+                            showColumnStripes=False
+                        )
+                        tabla.tableStyleInfo = estilo
+                        worksheet.add_table(tabla)
+                    
+                with st.sidebar:
+                    st.download_button("📥 Auditoría (Excel)", bx.getvalue(), f"Auditoria_MARBAR_{hoy.replace('/','-')}.xlsx", key="btn_ex")
+                
+    except Exception as e_sidebar: 
+        pass
 
 # --- 7. BANDEJA APROBACIONES ---
 if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
@@ -1068,7 +1097,7 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / I
 if st.session_state["usuario_actual"] == "ADMIN":
     st.markdown("---")
     st.title("⚙️ Consola Admin")
-    t1, t2 = st.tabs(["👥 Usuarios", "🚘 Flota"])
+    t1, t2, t3 = st.tabs(["👥 Usuarios", "🚘 Flota", "⚡ Carga Masiva"])
     
     with t1:
         st.info("💡 En este panel puedes gestionar los perfiles de los usuarios en Firebase. Recuerda que la contraseña ya no se usa aquí, sino que se gestiona mediante Auth0.")
@@ -1125,11 +1154,23 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     st.rerun()
 
     with t2:
-        adm_pat = st.text_input("Patente:").strip()
+        st.info("💡 Agregue las unidades de la flota y su documentación. El sistema bloqueará automáticamente los viajes si la VTV o el Seguro están vencidos.")
+        adm_pat = st.text_input("Patente / Interno:").strip()
+        
+        col_vtv, col_seg = st.columns(2)
+        with col_vtv:
+            adm_venc_vtv = st.date_input("Vencimiento VTV:", value=datetime.now(TZ_AR).date())
+        with col_seg:
+            adm_venc_seguro = st.date_input("Vencimiento Seguro:", value=datetime.now(TZ_AR).date())
         
         if st.button("💾 Agregar Equipo"):
             if adm_pat != "": 
-                db.collection("vehiculos").document(adm_pat).set({"Vehiculo": adm_pat})
+                db.collection("vehiculos").document(adm_pat).set({
+                    "Vehiculo": adm_pat,
+                    "Venc_VTV": adm_venc_vtv.strftime("%d/%m/%Y"),
+                    "Venc_Seguro": adm_venc_seguro.strftime("%d/%m/%Y")
+                })
+                st.success(f"Unidad {adm_pat} guardada correctamente.")
                 st.rerun()
                 
         df_v = obtener_vehiculos()
@@ -1146,3 +1187,37 @@ if st.session_state["usuario_actual"] == "ADMIN":
                 if elim_v.strip() != "": 
                     db.collection("vehiculos").document(elim_v.strip()).delete()
                     st.rerun()
+    
+    with t3:
+        st.subheader("Carga Masiva mediante Excel")
+        st.info("El Excel debe tener las columnas exactas: DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva")
+        
+        archivo_excel = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"])
+        
+        if archivo_excel is not None:
+            df_masivo = pd.read_excel(archivo_excel)
+            st.dataframe(df_masivo.head()) # Muestra una vista previa
+            
+            if st.button("🚀 Procesar e impactar en Base de Datos"):
+                barra_progreso = st.progress(0)
+                total_filas = len(df_masivo)
+                
+                for i, row in df_masivo.iterrows():
+                    # Formatear el DNI como texto limpio
+                    dni_str = str(row["DNI_Usuario"]).replace(".0", "").strip()
+                    
+                    db.collection("usuarios").document(dni_str).set({
+                        "DNI_Usuario": dni_str, 
+                        "Nombre": str(row["Nombre"]), 
+                        "Email": str(row["Email"]).strip().lower(), 
+                        "Regional": str(row["Regional"]),
+                        "Rol": str(row["Rol"]), 
+                        "Sector": str(row["Sector"]),
+                        "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")),
+                        "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A"))
+                    })
+                    # Actualizar barra de progreso
+                    barra_progreso.progress((i + 1) / total_filas)
+                
+                st.success(f"✅ ¡Se han cargado {total_filas} perfiles operativos a la base central de forma exitosa!")
+                st.rerun()
