@@ -1187,37 +1187,70 @@ if st.session_state["usuario_actual"] == "ADMIN":
                 if elim_v.strip() != "": 
                     db.collection("vehiculos").document(elim_v.strip()).delete()
                     st.rerun()
-    
+
     with t3:
-        st.subheader("Carga Masiva mediante Excel")
-        st.info("El Excel debe tener las columnas exactas: DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva")
+        st.subheader("⚡ Carga Masiva de Datos")
         
-        archivo_excel = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"])
+        # --- CARGA MASIVA DE USUARIOS ---
+        st.markdown("#### 👥 1. Carga de Usuarios")
+        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva** (el orden no importa).")
+        archivo_usuarios = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"], key="up_usu")
         
-        if archivo_excel is not None:
-            df_masivo = pd.read_excel(archivo_excel)
-            st.dataframe(df_masivo.head()) # Muestra una vista previa
+        if archivo_usuarios is not None:
+            df_masivo_u = pd.read_excel(archivo_usuarios)
+            # Intentar formatear las columnas de fecha si existen (de datetime a string DD/MM/YYYY)
+            for col_fecha in ["Venc_Licencia", "Venc_Defensiva"]:
+                if col_fecha in df_masivo_u.columns:
+                    df_masivo_u[col_fecha] = pd.to_datetime(df_masivo_u[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
             
-            if st.button("🚀 Procesar e impactar en Base de Datos"):
-                barra_progreso = st.progress(0)
-                total_filas = len(df_masivo)
-                
-                for i, row in df_masivo.iterrows():
-                    # Formatear el DNI como texto limpio
-                    dni_str = str(row["DNI_Usuario"]).replace(".0", "").strip()
-                    
-                    db.collection("usuarios").document(dni_str).set({
-                        "DNI_Usuario": dni_str, 
-                        "Nombre": str(row["Nombre"]), 
-                        "Email": str(row["Email"]).strip().lower(), 
-                        "Regional": str(row["Regional"]),
-                        "Rol": str(row["Rol"]), 
-                        "Sector": str(row["Sector"]),
-                        "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")),
-                        "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A"))
-                    })
-                    # Actualizar barra de progreso
-                    barra_progreso.progress((i + 1) / total_filas)
-                
-                st.success(f"✅ ¡Se han cargado {total_filas} perfiles operativos a la base central de forma exitosa!")
+            st.dataframe(df_masivo_u.head())
+            
+            if st.button("🚀 Procesar Usuarios en Firebase"):
+                barra_u = st.progress(0)
+                tot_u = len(df_masivo_u)
+                for i, row in df_masivo_u.iterrows():
+                    dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
+                    if dni_str and dni_str != "nan":
+                        db.collection("usuarios").document(dni_str).set({
+                            "DNI_Usuario": dni_str, 
+                            "Nombre": str(row.get("Nombre", "")), 
+                            "Email": str(row.get("Email", "")).strip().lower(), 
+                            "Regional": str(row.get("Regional", "")),
+                            "Rol": str(row.get("Rol", "")), 
+                            "Sector": str(row.get("Sector", "")),
+                            "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
+                            "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A")
+                        })
+                    barra_u.progress((i + 1) / tot_u)
+                st.success(f"✅ ¡{tot_u} usuarios cargados!")
+                st.rerun()
+
+        st.markdown("---")
+        
+        # --- CARGA MASIVA DE VEHÍCULOS ---
+        st.markdown("#### 🚘 2. Carga de Vehículos")
+        st.info("El Excel debe contener las columnas: **Vehiculo, Venc_VTV, Venc_Seguro** (el orden no importa).")
+        archivo_vehiculos = st.file_uploader("Subir planilla de flota (.xlsx)", type=["xlsx"], key="up_veh")
+        
+        if archivo_vehiculos is not None:
+            df_masivo_v = pd.read_excel(archivo_vehiculos)
+            for col_fecha in ["Venc_VTV", "Venc_Seguro"]:
+                if col_fecha in df_masivo_v.columns:
+                    df_masivo_v[col_fecha] = pd.to_datetime(df_masivo_v[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
+            
+            st.dataframe(df_masivo_v.head())
+            
+            if st.button("🚀 Procesar Vehículos en Firebase"):
+                barra_v = st.progress(0)
+                tot_v = len(df_masivo_v)
+                for i, row in df_masivo_v.iterrows():
+                    veh_str = str(row.get("Vehiculo", "")).strip()
+                    if veh_str and veh_str != "nan":
+                        db.collection("vehiculos").document(veh_str).set({
+                            "Vehiculo": veh_str,
+                            "Venc_VTV": str(row.get("Venc_VTV", "N/A")).replace("nan", "N/A"),
+                            "Venc_Seguro": str(row.get("Venc_Seguro", "N/A")).replace("nan", "N/A")
+                        })
+                    barra_v.progress((i + 1) / tot_v)
+                st.success(f"✅ ¡{tot_v} vehículos cargados!")
                 st.rerun()
