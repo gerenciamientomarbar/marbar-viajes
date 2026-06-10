@@ -943,11 +943,21 @@ if st.session_state["usuario_actual"]:
         if not df_sb.empty:
             hoy = datetime.now(TZ_AR).strftime("%d/%m/%Y")
             df_hoy = df_sb[df_sb['Fecha'].str.contains(hoy, na=False)]
+            df_p = df_hoy[df_hoy['Aprobacion'].str.contains("Pendiente", na=False)]
+            df_r = df_sb[df_sb['Estado_Viaje'] == "En viaje"]
+
+            # --- 1. MÉTRICAS GLOBALES (VISIBLES PARA TODOS) ---
+            with st.sidebar:
+                st.markdown("---")
+                st.subheader("📈 Resumen de Operaciones")
+                col_met1, col_met2 = st.columns(2)
+                col_met1.metric("Viajes Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pendientes" if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
+                col_met2.metric("En Ruta", str(len(df_r)))
             
+            # --- 2. LISTADOS DE VIAJES ---
             with st.sidebar:
                 st.markdown("---")
                 st.write("⚠️ **Pendientes (Hoy):**")
-            df_p = df_hoy[df_hoy['Aprobacion'].str.contains("Pendiente", na=False)]
             
             if not df_p.empty:
                 st.sidebar.dataframe(df_p[['Chofer', 'Destino']], hide_index=True)
@@ -957,13 +967,13 @@ if st.session_state["usuario_actual"]:
             with st.sidebar:
                 st.markdown("---")
                 st.write("🚚 **En Ruta:**")
-            df_r = df_sb[df_sb['Estado_Viaje'] == "En viaje"]
             
             if not df_r.empty:
                 st.sidebar.dataframe(df_r[['Chofer', 'Destino']], hide_index=True)
             else:
                 st.sidebar.write("✅ Ninguna.")
 
+            # --- 3. BÚSQUEDA DE FICHA RÁPIDA ---
             with st.sidebar:
                 st.markdown("---")
                 st.subheader("📜 Ficha Rápida")
@@ -990,6 +1000,7 @@ if st.session_state["usuario_actual"]:
                         key="btn_sb_txt"
                     )
 
+            # --- 4. CONSOLA EXCEL (RESTRINGIDA A MANDOS Y ADMIN) ---
             if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
                 with st.sidebar:
                     st.markdown("---")
@@ -1007,19 +1018,10 @@ if st.session_state["usuario_actual"]:
                         
                 df_ex = df_sb[cols].sort_values(by="ID", ascending=False).copy()
                 
-                # --- CÁLCULO DE DURACIÓN REAL EN EXCEL ---
+                # Cálculo de duración real en Excel
                 df_ex['Duracion_Real_Viaje'] = df_ex.apply(lambda r: calcular_duracion_real(r.get('Fecha', ''), r.get('Fecha_Fin', '')), axis=1)
                 
-                # --- IMPLEMENTACIÓN DE MÉTRICAS EN LA CONSOLA ADMIN ---
-                if st.session_state["usuario_actual"] == "ADMIN":
-                    with st.sidebar:
-                        st.markdown("---")
-                        st.subheader("📈 Resumen de Operaciones")
-                        col_met1, col_met2 = st.columns(2)
-                        col_met1.metric("Viajes Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pendientes" if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
-                        col_met2.metric("En Ruta", str(len(df_r)))
-                
-                # --- CREACIÓN DEL EXCEL EN FORMATO TABLA (CON DISEÑO OPENPYXL) ---
+                # Creación del Excel en formato tabla 
                 bx = io.BytesIO()
                 with pd.ExcelWriter(bx, engine='openpyxl') as wr: 
                     df_ex.to_excel(wr, index=False, sheet_name='Auditoria_Viajes')
