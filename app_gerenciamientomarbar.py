@@ -942,7 +942,11 @@ if st.session_state["usuario_actual"]:
         
         if not df_sb.empty:
             hoy = datetime.now(TZ_AR).strftime("%d/%m/%Y")
+            mes_actual = datetime.now(TZ_AR).strftime("/%m/%Y") # Formato /MM/YYYY para asegurar la búsqueda
+            
+            # Filtros de datos
             df_hoy = df_sb[df_sb['Fecha'].str.contains(hoy, na=False)]
+            df_mes = df_sb[df_sb['Fecha'].str.contains(mes_actual, na=False)]
             df_p = df_hoy[df_hoy['Aprobacion'].str.contains("Pendiente", na=False)]
             df_r = df_sb[df_sb['Estado_Viaje'] == "En viaje"]
 
@@ -950,9 +954,16 @@ if st.session_state["usuario_actual"]:
             with st.sidebar:
                 st.markdown("---")
                 st.subheader("📈 Resumen de Operaciones")
+                
+                # Primera fila de métricas (Hoy y Ruta)
                 col_met1, col_met2 = st.columns(2)
-                col_met1.metric("Viajes Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pendientes" if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
+                col_met1.metric("Viajes Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pend." if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
                 col_met2.metric("En Ruta", str(len(df_r)))
+                
+                # Segunda fila de métricas (Mensual e Histórico)
+                col_met3, col_met4 = st.columns(2)
+                col_met3.metric("Este Mes", str(len(df_mes)))
+                col_met4.metric("Histórico", str(len(df_sb)))
             
             # --- 2. LISTADOS DE VIAJES ---
             with st.sidebar:
