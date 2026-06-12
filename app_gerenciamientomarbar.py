@@ -264,117 +264,85 @@ if "paso_actual" not in st.session_state:
     st.session_state["paso_actual"] = "Menu"
 
 # -----------------------------------------
-# SISTEMA DE LOGIN CORPORATIVO (AUTH0)
+# SISTEMA DE LOGIN (FIREBASE AUTH)
 # -----------------------------------------
 
+# IMPORTANTE: Necesitas agregar tu Web API Key de Firebase en los secretos de Streamlit
 try:
-    AUTH0_DOMAIN = st.secrets["auth0"]["domain"]
-    CLIENT_ID = st.secrets["auth0"]["client_id"]
-    CLIENT_SECRET = st.secrets["auth0"]["client_secret"]
-except KeyError as e:
-    st.error(f"Falta configurar las credenciales de Auth0: {e}")
+    FIREBASE_API_KEY = st.secrets["firebase_api_key"]
+except KeyError:
+    st.error("⚠️ Falta configurar 'firebase_api_key' en los secretos de la nube.")
     st.stop()
 
-# IMPORTANTE: URL de redirección oficial para producción fija en la nube.
-REDIRECT_URI = "https://gerenciamientomarbar-marbar-via-app-gerenciamientomarbar-4ol9rm.streamlit.app/"
-
-AUTHORIZE_URL = "https://" + AUTH0_DOMAIN + "/authorize"
-TOKEN_URL = "https://" + AUTH0_DOMAIN + "/oauth/token"
-USERINFO_URL = "https://" + AUTH0_DOMAIN + "/userinfo"
-
 if st.session_state["usuario_actual"] is None:
+    col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
+    with col_logo2:
+        if os.path.exists("logo.png"): 
+            st.image("logo.png", use_column_width=True)
+        else: 
+            st.warning("⚠️ Falta 'logo.png'")
     
-    query_params = st.query_params
+    st.title("🔒 Acceso Seguro - MARBAR SA")
+    st.info("Ingrese sus credenciales de Firebase para acceder a la plataforma operativa.")
     
-    if "code" not in query_params:
-        col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
-        with col_logo2:
-            if os.path.exists("logo.png"): 
-                st.image("logo.png", use_column_width=True)
-            else: 
-                st.warning("⚠️ Falta 'logo.png'")
+    with st.form("form_login"):
+        correo_login = st.text_input("Correo Electrónico:").strip().lower()
+        pass_login = st.text_input("Contraseña:", type="password")
+        btn_ingresar = st.form_submit_button("🔑 Iniciar Sesión")
         
-        st.title("🔒 Acceso Seguro - MARBAR SA")
-        st.info("El acceso a esta plataforma está restringido a personal autorizado. Ingrese mediante el portal corporativo de identidad.")
-        
-        # Generamos la URL de autorización nativa
-        uri = f"{AUTHORIZE_URL}?response_type=code&client_id={CLIENT_ID}&redirect_uri={urllib.parse.quote(REDIRECT_URI)}&scope=openid%20profile%20email"
-        
-        st.link_button("🔑 INICIAR SESIÓN CORPORATIVA", uri, use_container_width=True)
-        st.stop() 
-        
-    else:
-        code = query_params["code"]
-        
-        try:
-            # 1. Pedimos el Token de acceso a Auth0 de manera directa
+    if btn_ingresar:
+        if not correo_login or not pass_login:
+            st.error("⛔ Ingrese correo y contraseña.")
+        else:
+            # API REST de Firebase para verificar la contraseña
+            url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}"
             payload = {
-                "grant_type": "authorization_code",
-                "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
-                "code": code,
-                "redirect_uri": REDIRECT_URI
+                "email": correo_login,
+                "password": pass_login,
+                "returnSecureToken": True
             }
-            token_response = requests.post(TOKEN_URL, json=payload)
-            token_data = token_response.json()
+            respuesta = requests.post(url, json=payload)
             
-            # 2. Con ese Token, consultamos la identidad del operador
-            access_token = token_data.get("access_token")
-            headers = {'Authorization': f'Bearer {access_token}'}
-            userinfo_response = requests.get(USERINFO_URL, headers=headers)
-            user_info = userinfo_response.json()
-            
-            correo_auth0 = user_info.get("email", "").lower()
-            
-            # --- COTEJO CON LA BASE DE DATOS DE LA EMPRESA (FIREBASE) ---
-            usuarios_ref = db.collection("usuarios").where("Email", "==", correo_auth0).stream()
-            usuario_encontrado = None
-            for u in usuarios_ref:
-                usuario_encontrado = u.to_dict()
-                break
-            
-            if usuario_encontrado:
-                st.session_state.update({
-                    "usuario_actual": usuario_encontrado.get("Rol", "Chofer"), 
-                    "nombre_empleado": usuario_encontrado.get("Nombre", "Empleado MARBAR"), 
-                    "sector_empleado": usuario_encontrado.get("Sector", "Sin Sector"), 
-                    "regional_empleado": usuario_encontrado.get("Regional", "No asignada"),
-                    "venc_licencia": usuario_encontrado.get("Venc_Licencia", "N/A"),
-                    "venc_defensiva": usuario_encontrado.get("Venc_Defensiva", "N/A"),
-                    "email_empleado": correo_auth0,
-                    "paso_actual": "Menu"
-                })
+            if respuesta.status_code == 200:
+                # --- LOGIN EXITOSO: COTEJO CON LA BASE DE DATOS (FIRESTORE) ---
+                usuarios_ref = db.collection("usuarios").where("Email", "==", correo_login).stream()
+                usuario_encontrado = None
+                for u in usuarios_ref:
+                    usuario_encontrado = u.to_dict()
+                    break
                 
-                st.query_params.clear()
-                st.rerun()
-                
-            elif correo_auth0 == "admin@marbar.com":
-                st.session_state.update({
-                    "usuario_actual": "ADMIN", 
-                    "nombre_empleado": "Administrador", 
-                    "sector_empleado": "Gerencia", 
-                    "regional_empleado": "Sede Central",
-                    "venc_licencia": "N/A",
-                    "venc_defensiva": "N/A",
-                    "email_empleado": correo_auth0,
-                    "paso_actual": "Menu"
-                })
-                st.query_params.clear()
-                st.rerun()
-                
-            else:
-                st.error(f"⛔ El correo **{correo_auth0}** es válido, pero no tiene un perfil operativo asignado en el Sistema de Viajes. Solicite el alta a la supervisión.")
-                if st.button("⬅️ Volver al Inicio"):
-                    st.query_params.clear()
+                if usuario_encontrado:
+                    st.session_state.update({
+                        "usuario_actual": usuario_encontrado.get("Rol", "Chofer"), 
+                        "nombre_empleado": usuario_encontrado.get("Nombre", "Empleado MARBAR"), 
+                        "sector_empleado": usuario_encontrado.get("Sector", "Sin Sector"), 
+                        "regional_empleado": usuario_encontrado.get("Regional", "No asignada"),
+                        "venc_licencia": usuario_encontrado.get("Venc_Licencia", "N/A"),
+                        "venc_defensiva": usuario_encontrado.get("Venc_Defensiva", "N/A"),
+                        "email_empleado": correo_login,
+                        "paso_actual": "Menu"
+                    })
                     st.rerun()
-                st.stop()
-                
-        except Exception as e:
-            st.error(f"Ocurrió un error en la validación corporativa: {e}")
-            if st.button("Intentar de nuevo"):
-                st.query_params.clear()
-                st.rerun()
-            st.stop()
+                    
+                elif correo_login == "admin@marbar.com":
+                    st.session_state.update({
+                        "usuario_actual": "ADMIN", 
+                        "nombre_empleado": "Administrador", 
+                        "sector_empleado": "Gerencia", 
+                        "regional_empleado": "Sede Central",
+                        "venc_licencia": "N/A",
+                        "venc_defensiva": "N/A",
+                        "email_empleado": correo_login,
+                        "paso_actual": "Menu"
+                    })
+                    st.rerun()
+                    
+                else:
+                    st.error(f"⛔ El correo **{correo_login}** es válido en Firebase, pero no tiene un perfil operativo asignado. Solicite el alta a la supervisión.")
+            else:
+                st.error("⛔ Correo o contraseña incorrectos. Verifique sus datos.")
+    
+    st.stop() # Detiene la ejecución para no mostrar el resto de la app
 
 # --- WORKFLOW PRINCIPAL ---
 
@@ -928,9 +896,7 @@ if st.session_state["usuario_actual"]:
             
         if st.button("🚪 Cerrar Sesión", use_container_width=True): 
             st.session_state.clear()
-            st.query_params.clear()
-            url_salida_auth0 = f"https://{AUTH0_DOMAIN}/v2/logout?client_id={CLIENT_ID}&returnTo={urllib.parse.quote(REDIRECT_URI)}"
-            st.markdown(f'<meta http-equiv="refresh" content="0; url={url_salida_auth0}">', unsafe_allow_html=True)
+            st.rerun()
 
     try:
         viajes_sidebar = db.collection(COLECCION_VIAJES).stream()
