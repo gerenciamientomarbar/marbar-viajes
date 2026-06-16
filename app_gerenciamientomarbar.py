@@ -289,6 +289,29 @@ if st.session_state["usuario_actual"] is None:
         correo_login = st.text_input("Correo Electrónico:").strip().lower()
         pass_login = st.text_input("Contraseña:", type="password")
         btn_ingresar = st.form_submit_button("🔑 Iniciar Sesión")
+
+    st.markdown("---")
+    with st.expander("✨ Configurar contraseña por primera vez u Olvidé mi contraseña"):
+        st.write("Si el Administrador ya te dio de alta, ingresa tu correo para recibir un enlace oficial de configuración de contraseña.")
+        correo_configurar = st.text_input("Correo Registrado:", key="txt_correo_config").strip().lower()
+        btn_enviar_enlace = st.button("📧 Enviar Enlace de Configuración", use_container_width=True)
+        
+        if btn_enviar_enlace:
+            if correo_configurar != "":
+                # Endpoint REST de Firebase para enviar el correo de recuperación/configuración
+                url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
+                payload_reset = {
+                    "requestType": "PASSWORD_RESET",
+                    "email": correo_configurar
+                }
+                res_reset = requests.post(url_reset, json=payload_reset)
+                
+                if res_reset.status_code == 200:
+                    st.success("📩 ¡Enlace enviado con éxito! Revisa tu bandeja de entrada (e incluso la carpeta de Spam o Correo no deseado) para establecer tu contraseña.")
+                else:
+                    st.error("⛔ El correo ingresado no se encuentra registrado en el sistema o está inhabilitado. Verifica con el Administrador.")
+            else:
+                st.error("Por favor, escribe un correo electrónico válido.")
         
     if btn_ingresar:
         if not correo_login or not pass_login:
@@ -1096,8 +1119,16 @@ if st.session_state["usuario_actual"] == "ADMIN":
         
         if st.button("💾 Asignar Perfil Operativo"):
             if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
-                
                 try:
+                    # 1. Creamos el casillero de autenticación en segundo plano con una clave aleatoria temporal
+                    try:
+                        pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+                        auth.create_user(email=adm_email, password=pass_temporal)
+                    except Exception:
+                        # Si el usuario ya existía en la sección de autenticación, ignoramos para no pisarlo
+                        pass
+                    
+                    # 2. Guardamos el perfil operativo en la base de datos (Firestore) como siempre
                     db.collection("usuarios").document(adm_dni).set({
                         "DNI_Usuario": adm_dni, 
                         "Nombre": adm_nombre, 
@@ -1108,6 +1139,13 @@ if st.session_state["usuario_actual"] == "ADMIN":
                         "Venc_Licencia": adm_venc_lic.strftime("%d/%m/%Y"),
                         "Venc_Defensiva": adm_venc_def.strftime("%d/%m/%Y")
                     })
+                    
+                    st.success(f"✅ ¡Perfil asignado con éxito! Indique al usuario que use la opción 'Configurar contraseña por primera vez' en la pantalla de inicio utilizando su correo ({adm_email}).")
+                    st.rerun()
+                except Exception as e: 
+                    st.error(f"Error de Firebase: {e}")
+            else: 
+                st.error("Complete todos los campos de texto, incluyendo la Regional.")
                     
                     st.success(f"✅ ¡Perfil asignado con éxito! Ahora el usuario podrá ingresar a la aplicación usando su cuenta corporativa Auth0 ({adm_email}).")
                     st.rerun()
@@ -1189,19 +1227,32 @@ if st.session_state["usuario_actual"] == "ADMIN":
                 tot_u = len(df_masivo_u)
                 for i, row in df_masivo_u.iterrows():
                     dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
-                    if dni_str and dni_str != "nan":
-                        db.collection("usuarios").document(dni_str).set({
-                            "DNI_Usuario": dni_str, 
-                            "Nombre": str(row.get("Nombre", "")), 
-                            "Email": str(row.get("Email", "")).strip().lower(), 
-                            "Regional": str(row.get("Regional", "")),
-                            "Rol": str(row.get("Rol", "")), 
-                            "Sector": str(row.get("Sector", "")),
-                            "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
-                            "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A")
-                        })
+                    email_str = str(row.get("Email", "")).strip().lower()
+                    
+                    if dni_str and dni_str != "nan" and email_str and email_str != "nan":
+                        try:
+                            # 1. Registramos de forma masiva en el motor de autenticación
+                            try:
+                                pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+                                auth.create_user(email=email_str, password=pass_temporal)
+                            except Exception:
+                                pass
+                            
+                            # 2. Guardamos en la base de datos Firestore
+                            db.collection("usuarios").document(dni_str).set({
+                                "DNI_Usuario": dni_str, 
+                                "Nombre": str(row.get("Nombre", "")), 
+                                "Email": email_str, 
+                                "Regional": str(row.get("Regional", "")),
+                                "Rol": str(row.get("Rol", "")), 
+                                "Sector": str(row.get("Sector", "")),
+                                "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
+                                "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A")
+                            })
+                        except Exception:
+                            pass
                     barra_u.progress((i + 1) / tot_u)
-                st.success(f"✅ ¡{tot_u} usuarios cargados!")
+                st.success(f"✅ ¡{tot_u} usuarios procesados e integrados al sistema de credenciales!")
                 st.rerun()
 
         st.markdown("---")
