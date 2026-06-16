@@ -29,7 +29,7 @@ st.set_page_config(
 # VARIABLES GLOBALES Y FIREBASE
 # -----------------------------------------
 import firebase_admin
-from firebase_admin import credentials, firestore, auth
+from firebase_admin import credentials, firestore, auth, exceptions
 
 # --- CONFIGURACIÓN DE LA BASE DE DATOS CENTRAL ---
 COLECCION_VIAJES = "viajes"
@@ -1124,9 +1124,10 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     try:
                         pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                         auth.create_user(email=adm_email, password=pass_temporal)
-                    except Exception:
-                        # Si el usuario ya existía en la sección de autenticación, ignoramos para no pisarlo
-                        pass
+                    except firebase_admin.auth.EmailAlreadyExistsError:
+                        pass # Si ya existe, lo ignoramos tranquilamente
+                    except Exception as e_auth:
+                        pass # Ignoramos cualquier otro error menor de autenticación
                     
                     # 2. Guardamos el perfil operativo en la base de datos (Firestore) como siempre
                     db.collection("usuarios").document(adm_dni).set({
@@ -1235,6 +1236,8 @@ if st.session_state["usuario_actual"] == "ADMIN":
                             try:
                                 pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                                 auth.create_user(email=email_str, password=pass_temporal)
+                            except firebase_admin.auth.EmailAlreadyExistsError:
+                                pass # Si el correo ya existe en Firebase, seguimos de largo
                             except Exception:
                                 pass
                             
