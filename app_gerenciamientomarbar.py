@@ -1124,10 +1124,8 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     try:
                         pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                         auth.create_user(email=adm_email, password=pass_temporal)
-                    except firebase_admin.auth.EmailAlreadyExistsError:
-                        pass # Si ya existe, lo ignoramos tranquilamente
-                    except Exception as e_auth:
-                        pass # Ignoramos cualquier otro error menor de autenticación
+                    except Exception:
+                        pass # Si falla (por ej, porque el correo ya existe), lo ignoramos silenciosamente
                     
                     # 2. Guardamos el perfil operativo en la base de datos (Firestore) como siempre
                     db.collection("usuarios").document(adm_dni).set({
@@ -1236,10 +1234,8 @@ if st.session_state["usuario_actual"] == "ADMIN":
                             try:
                                 pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                                 auth.create_user(email=email_str, password=pass_temporal)
-                            except firebase_admin.auth.EmailAlreadyExistsError:
-                                pass # Si el correo ya existe en Firebase, seguimos de largo
                             except Exception:
-                                pass
+                                pass # Si falla (por ej, porque el correo ya existe), seguimos con la base de datos
                             
                             # 2. Guardamos en la base de datos Firestore
                             db.collection("usuarios").document(dni_str).set({
