@@ -310,11 +310,12 @@ if st.session_state["usuario_actual"] is None:
                             "regional_empleado": usuario_encontrado.get("Regional", "No asignada"),
                             "venc_licencia": usuario_encontrado.get("Venc_Licencia", "N/A"),
                             "venc_defensiva": usuario_encontrado.get("Venc_Defensiva", "N/A"),
+                            "venc_def_chile": usuario_encontrado.get("Venc_Def_Chile", "N/A"), # <--- NUEVO
                             "email_empleado": correo_login,
                             "paso_actual": "Menu"
                         })
                         st.rerun()
-                        
+                    
                     elif correo_login == "admin@marbar.com":
                         st.session_state.update({
                             "usuario_actual": "ADMIN", 
@@ -323,6 +324,7 @@ if st.session_state["usuario_actual"] is None:
                             "regional_empleado": "Sede Central",
                             "venc_licencia": "N/A",
                             "venc_defensiva": "N/A",
+                            "venc_def_chile": "N/A", # <--- NUEVO
                             "email_empleado": correo_login,
                             "paso_actual": "Menu"
                         })
@@ -360,18 +362,27 @@ if st.session_state["paso_actual"] == "Menu":
     if st.session_state["usuario_actual"] != "ADMIN":
         v_lic = st.session_state.get("venc_licencia", "N/A")
         v_def = st.session_state.get("venc_defensiva", "N/A")
+        v_def_chile = st.session_state.get("venc_def_chile", "N/A")
+        reg_emp = st.session_state.get("regional_empleado", "N/A").strip().lower()
         hoy_dt = datetime.now(TZ_AR).date()
         
-        for tipo_doc, fecha_str in [("Carnet de Manejo", v_lic), ("Curso de Conducción Defensiva", v_def)]:
+        # Lista base de documentos a auditar
+        docs_a_revisar = [("Carnet de Manejo", v_lic), ("Curso de Conducción Defensiva", v_def)]
+        
+        # Si el usuario es de la regional Chile, sumamos el carnet internacional a la auditoría
+        if reg_emp == "chile":
+            docs_a_revisar.append(("Manejo Defensivo (Chile)", v_def_chile))
+            
+        for tipo_doc, fecha_str in docs_a_revisar:
             if fecha_str and fecha_str != "N/A":
                 try:
                     fecha_venc = datetime.strptime(fecha_str, "%d/%m/%Y").date()
                     dias_restantes = (fecha_venc - hoy_dt).days
                     
                     if dias_restantes < 0:
-                        st.error(f"🚨 **VENCIMIENTO CRÍTICO:** Su **{tipo_doc}** caducó hace {abs(dias_restantes)} días ({fecha_str}). Gestione la renovación de forma urgente para regularizar su estado operativo.")
+                        st.error(f"🚨 **VENCIMIENTO CRÍTICO:** Su **{tipo_doc}** caducó hace {abs(dias_restantes)} días ({fecha_str}). Gestione la renovación de forma urgente.")
                     elif dias_restantes <= 30:
-                        st.warning(f"⚠️ **AVISO DE VENCIMIENTO:** Su **{tipo_doc}** vencerá en {dias_restantes} días ({fecha_str}). Recuerde coordinar los exámenes y cursos correspondientes.")
+                        st.warning(f"⚠️ **AVISO DE VENCIMIENTO:** Su **{tipo_doc}** vencerá en {dias_restantes} días ({fecha_str}).")
                 except Exception:
                     pass
     
@@ -447,9 +458,15 @@ if st.session_state["paso_actual"] == "Menu":
             if st.session_state["usuario_actual"] != "ADMIN":
                 v_lic = st.session_state.get("venc_licencia", "N/A")
                 v_def = st.session_state.get("venc_defensiva", "N/A")
+                v_def_chile = st.session_state.get("venc_def_chile", "N/A")
+                reg_emp = st.session_state.get("regional_empleado", "N/A").strip().lower()
                 hoy_dt = datetime.now(TZ_AR).date()
                 
-                for fecha_str in [v_lic, v_def]:
+                fechas_check = [v_lic, v_def]
+                if reg_emp == "chile":
+                    fechas_check.append(v_def_chile)
+                
+                for fecha_str in fechas_check:
                     if fecha_str and fecha_str != "N/A":
                         try:
                             fecha_venc = datetime.strptime(fecha_str, "%d/%m/%Y").date()
@@ -460,7 +477,7 @@ if st.session_state["paso_actual"] == "Menu":
                             pass
                             
             if documentacion_vencida:
-                st.error("⛔ **ACCESO DENEGADO:** Tiene documentación habilitante vencida. Por normativas de seguridad, el sistema bloqueó la creación de nuevos viajes. Regularice su situación con la supervisión.")
+                st.error("⛔ **ACCESO DENEGADO:** Tiene documentación habilitante (Nacional o Internacional) vencida. Por normativas de seguridad, el sistema bloqueó la creación de nuevos viajes.")
             else:
                 st.session_state["paso_actual"] = "Test_Chofer"
                 st.rerun()
@@ -933,9 +950,10 @@ if st.session_state["usuario_actual"] == "ADMIN":
         adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia", "Completacion"])
         adm_rol = st.selectbox("Rol:", ["Chofer", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "ADMIN"])
         
-        col_v1, col_v2 = st.columns(2)
-        with col_v1: adm_venc_lic = st.date_input("Vencimiento Carnet de Manejo:", value=datetime.now(TZ_AR).date())
-        with col_v2: adm_venc_def = st.date_input("Vencimiento Conducción Defensiva:", value=datetime.now(TZ_AR).date())
+        col_v1, col_v2, col_v3 = st.columns(3)
+        with col_v1: adm_venc_lic = st.date_input("Venc. Carnet Manejo:", value=datetime.now(TZ_AR).date())
+        with col_v2: adm_venc_def = st.date_input("Venc. Defensiva:", value=datetime.now(TZ_AR).date())
+        with col_v3: adm_venc_def_chile = st.date_input("Venc. Defensiva Chile:", value=datetime.now(TZ_AR).date())
         
         if st.button("💾 Asignar Perfil Operativo"):
             if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
@@ -949,10 +967,12 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     
                     db.collection("usuarios").document(adm_dni).set({
                         "DNI_Usuario": adm_dni, "Nombre": adm_nombre, "Email": adm_email, "Regional": adm_regional,
-                        "Rol": adm_rol, "Sector": adm_sector, "Venc_Licencia": adm_venc_lic.strftime("%d/%m/%Y"),
-                        "Venc_Defensiva": adm_venc_def.strftime("%d/%m/%Y")
+                        "Rol": adm_rol, "Sector": adm_sector, 
+                        "Venc_Licencia": adm_venc_lic.strftime("%d/%m/%Y"),
+                        "Venc_Defensiva": adm_venc_def.strftime("%d/%m/%Y"),
+                        "Venc_Def_Chile": adm_venc_def_chile.strftime("%d/%m/%Y") # <--- NUEVO
                     })
-                    st.success(f"✅ ¡Perfil asignado con éxito! Se ha enviado un correo a {adm_email} para que configure su contraseña.")
+                    st.success(f"✅ ¡Perfil asignado con éxito! Se ha enviado un correo a {adm_email} para configurar la clave.")
                     st.rerun()
                 except Exception as e: st.error(f"Error de Firebase: {e}")
             else: st.error("Complete todos los campos de texto, incluyendo la Regional.")
@@ -996,12 +1016,12 @@ if st.session_state["usuario_actual"] == "ADMIN":
     with t3:
         st.subheader("⚡ Carga Masiva de Datos")
         st.markdown("#### 👥 1. Carga de Usuarios")
-        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva**.")
+        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva, Venc_Def_Chile**.")
         archivo_usuarios = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"], key="up_usu")
         
         if archivo_usuarios is not None:
             df_masivo_u = pd.read_excel(archivo_usuarios)
-            for col_fecha in ["Venc_Licencia", "Venc_Defensiva"]:
+            for col_fecha in ["Venc_Licencia", "Venc_Defensiva", "Venc_Def_Chile"]: # <--- ACTUALIZADO
                 if col_fecha in df_masivo_u.columns: df_masivo_u[col_fecha] = pd.to_datetime(df_masivo_u[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
             st.dataframe(df_masivo_u.head())
             
@@ -1024,11 +1044,12 @@ if st.session_state["usuario_actual"] == "ADMIN":
                                 "DNI_Usuario": dni_str, "Nombre": str(row.get("Nombre", "")), "Email": email_str, 
                                 "Regional": str(row.get("Regional", "")), "Rol": str(row.get("Rol", "")), "Sector": str(row.get("Sector", "")),
                                 "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
-                                "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A")
+                                "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A"),
+                                "Venc_Def_Chile": str(row.get("Venc_Def_Chile", "N/A")).replace("nan", "N/A") # <--- NUEVO
                             })
                         except Exception: pass
                     barra_u.progress((i + 1) / tot_u)
-                st.success(f"✅ ¡{tot_u} usuarios procesados! Se les ha enviado el correo de configuración automáticamente a los correos nuevos.")
+                st.success(f"✅ ¡{tot_u} usuarios procesados!")
                 st.rerun()
 
         st.markdown("---")
