@@ -3,7 +3,6 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 import json
 import urllib.parse
-from PIL import Image
 import os
 import io
 import streamlit.components.v1 as components
@@ -153,7 +152,6 @@ def calcular_duracion_real(fecha_inicio, fecha_fin):
 def generar_ficha_html(v_data):
     """Genera la ficha corporativa de auditoría en formato HTML para impresión/PDF"""
     
-    # Función para ordenar numéricamente los items
     def ordenar_por_numero(texto):
         try: return int(texto.split(".")[0])
         except: return 99
@@ -264,7 +262,6 @@ if "paso_actual" not in st.session_state:
 # SISTEMA DE LOGIN (FIREBASE AUTH)
 # -----------------------------------------
 
-# IMPORTANTE: Necesitas agregar tu Web API Key de Firebase en los secretos de Streamlit
 try:
     FIREBASE_API_KEY = st.secrets["firebase_api_key"]
 except KeyError:
@@ -280,89 +277,78 @@ if st.session_state["usuario_actual"] is None:
             st.warning("⚠️ Falta 'logo.png'")
     
     st.title("🔒 Acceso Seguro - MARBAR SA")
-    st.info("Ingrese sus credenciales de Firebase para acceder a la plataforma operativa.")
     
-    with st.form("form_login"):
-        correo_login = st.text_input("Correo Electrónico:").strip().lower()
-        pass_login = st.text_input("Contraseña:", type="password")
-        btn_ingresar = st.form_submit_button("🔑 Iniciar Sesión")
+    tab_login, tab_recupero = st.tabs(["🔑 Iniciar Sesión", "✉️ Configurar o Recuperar Contraseña"])
+    
+    with tab_login:
+        st.info("Ingrese sus credenciales de Firebase para acceder a la plataforma operativa.")
+        with st.form("form_login"):
+            correo_login = st.text_input("Correo Electrónico:").strip().lower()
+            pass_login = st.text_input("Contraseña:", type="password")
+            btn_ingresar = st.form_submit_button("Ingresar al Sistema")
+            
+        if btn_ingresar:
+            if not correo_login or not pass_login:
+                st.error("⛔ Ingrese correo y contraseña.")
+            else:
+                url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}"
+                payload = {"email": correo_login, "password": pass_login, "returnSecureToken": True}
+                respuesta = requests.post(url, json=payload)
+                
+                if respuesta.status_code == 200:
+                    usuarios_ref = db.collection("usuarios").where("Email", "==", correo_login).stream()
+                    usuario_encontrado = None
+                    for u in usuarios_ref:
+                        usuario_encontrado = u.to_dict()
+                        break
+                    
+                    if usuario_encontrado:
+                        st.session_state.update({
+                            "usuario_actual": usuario_encontrado.get("Rol", "Chofer"), 
+                            "nombre_empleado": usuario_encontrado.get("Nombre", "Empleado MARBAR"), 
+                            "sector_empleado": usuario_encontrado.get("Sector", "Sin Sector"), 
+                            "regional_empleado": usuario_encontrado.get("Regional", "No asignada"),
+                            "venc_licencia": usuario_encontrado.get("Venc_Licencia", "N/A"),
+                            "venc_defensiva": usuario_encontrado.get("Venc_Defensiva", "N/A"),
+                            "email_empleado": correo_login,
+                            "paso_actual": "Menu"
+                        })
+                        st.rerun()
+                        
+                    elif correo_login == "admin@marbar.com":
+                        st.session_state.update({
+                            "usuario_actual": "ADMIN", 
+                            "nombre_empleado": "Administrador", 
+                            "sector_empleado": "Gerencia", 
+                            "regional_empleado": "Sede Central",
+                            "venc_licencia": "N/A",
+                            "venc_defensiva": "N/A",
+                            "email_empleado": correo_login,
+                            "paso_actual": "Menu"
+                        })
+                        st.rerun()
+                    else:
+                        st.error(f"⛔ El correo **{correo_login}** no tiene un perfil operativo asignado. Contacte al administrador.")
+                else:
+                    st.error("⛔ Correo o contraseña incorrectos. Verifique sus datos.")
 
-    st.markdown("---")
-    with st.expander("✨ Configurar contraseña por primera vez u Olvidé mi contraseña"):
-        st.write("Si el Administrador ya te dio de alta, ingresa tu correo para recibir un enlace oficial de configuración de contraseña.")
+    with tab_recupero:
+        st.write("Si es su primer ingreso o ha olvidado su clave, ingrese su correo corporativo. Le enviaremos un enlace oficial para configurar su nueva contraseña.")
         correo_configurar = st.text_input("Correo Registrado:", key="txt_correo_config").strip().lower()
-        btn_enviar_enlace = st.button("📧 Enviar Enlace de Configuración", use_container_width=True)
-        
-        if btn_enviar_enlace:
+        if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
             if correo_configurar != "":
-                # Endpoint REST de Firebase para enviar el correo de recuperación/configuración
                 url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
-                payload_reset = {
-                    "requestType": "PASSWORD_RESET",
-                    "email": correo_configurar
-                }
+                payload_reset = {"requestType": "PASSWORD_RESET", "email": correo_configurar}
                 res_reset = requests.post(url_reset, json=payload_reset)
                 
                 if res_reset.status_code == 200:
-                    st.success("📩 ¡Enlace enviado con éxito! Revisa tu bandeja de entrada (e incluso la carpeta de Spam o Correo no deseado) para establecer tu contraseña.")
+                    st.success("📩 ¡Enlace enviado con éxito! Revise su bandeja de entrada (o Spam) para establecer la contraseña.")
                 else:
-                    st.error("⛔ El correo ingresado no se encuentra registrado en el sistema o está inhabilitado. Verifica con el Administrador.")
+                    st.error("⛔ El correo no se encuentra registrado en el sistema. Verifique con el Administrador.")
             else:
-                st.error("Por favor, escribe un correo electrónico válido.")
-        
-    if btn_ingresar:
-        if not correo_login or not pass_login:
-            st.error("⛔ Ingrese correo y contraseña.")
-        else:
-            # API REST de Firebase para verificar la contraseña
-            url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}"
-            payload = {
-                "email": correo_login,
-                "password": pass_login,
-                "returnSecureToken": True
-            }
-            respuesta = requests.post(url, json=payload)
-            
-            if respuesta.status_code == 200:
-                # --- LOGIN EXITOSO: COTEJO CON LA BASE DE DATOS (FIRESTORE) ---
-                usuarios_ref = db.collection("usuarios").where("Email", "==", correo_login).stream()
-                usuario_encontrado = None
-                for u in usuarios_ref:
-                    usuario_encontrado = u.to_dict()
-                    break
-                
-                if usuario_encontrado:
-                    st.session_state.update({
-                        "usuario_actual": usuario_encontrado.get("Rol", "Chofer"), 
-                        "nombre_empleado": usuario_encontrado.get("Nombre", "Empleado MARBAR"), 
-                        "sector_empleado": usuario_encontrado.get("Sector", "Sin Sector"), 
-                        "regional_empleado": usuario_encontrado.get("Regional", "No asignada"),
-                        "venc_licencia": usuario_encontrado.get("Venc_Licencia", "N/A"),
-                        "venc_defensiva": usuario_encontrado.get("Venc_Defensiva", "N/A"),
-                        "email_empleado": correo_login,
-                        "paso_actual": "Menu"
-                    })
-                    st.rerun()
-                    
-                elif correo_login == "admin@marbar.com":
-                    st.session_state.update({
-                        "usuario_actual": "ADMIN", 
-                        "nombre_empleado": "Administrador", 
-                        "sector_empleado": "Gerencia", 
-                        "regional_empleado": "Sede Central",
-                        "venc_licencia": "N/A",
-                        "venc_defensiva": "N/A",
-                        "email_empleado": correo_login,
-                        "paso_actual": "Menu"
-                    })
-                    st.rerun()
-                    
-                else:
-                    st.error(f"⛔ El correo **{correo_login}** es válido en Firebase, pero no tiene un perfil operativo asignado. Solicite el alta a la supervisión.")
-            else:
-                st.error("⛔ Correo o contraseña incorrectos. Verifique sus datos.")
+                st.error("Por favor, escriba un correo electrónico válido.")
     
-    st.stop() # Detiene la ejecución para no mostrar el resto de la app
+    st.stop() 
 
 # --- WORKFLOW PRINCIPAL ---
 
@@ -457,7 +443,6 @@ if st.session_state["paso_actual"] == "Menu":
     col_menu1, col_menu2 = st.columns(2)
     with col_menu1:
         if st.button("🚀 NUEVO GERENCIAMIENTO DE VIAJE", use_container_width=True): 
-            # --- BLOQUEO ESTRICTO POR DOCUMENTACIÓN VENCIDA ---
             documentacion_vencida = False
             if st.session_state["usuario_actual"] != "ADMIN":
                 v_lic = st.session_state.get("venc_licencia", "N/A")
@@ -589,11 +574,8 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     regional_usuario = st.session_state.get("regional_empleado", "No asignada")
     
     mapa_autoridad = {
-        "Chofer": 0, 
-        "Supervisor / Coordinador / Ingeniero": 1, 
-        "Jefe de Servicio": 2, 
-        "Gerencia": 3, 
-        "ADMIN": 3
+        "Chofer": 0, "Supervisor / Coordinador / Ingeniero": 1, 
+        "Jefe de Servicio": 2, "Gerencia": 3, "ADMIN": 3
     }
     nivel_aprobacion_usuario = mapa_autoridad.get(rol_usuario, 0)
     
@@ -671,10 +653,8 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
         pasajeros_detalle = st.text_input("👥 Nombres:")
         
     if v_pasajeros: 
-        if v_pasajeros == "Con pasajeros":
-            puntos_totales += 1 
-        else:
-            puntos_totales += 5
+        if v_pasajeros == "Con pasajeros": puntos_totales += 1 
+        else: puntos_totales += 5
     
     v_camino = st.radio("Superficie:", ["Pavimento", "Mixto", "Tierra"], index=None)
     if v_camino: 
@@ -719,7 +699,6 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     elif puntos_totales > 30:
         nivel_riesgo_calculado = 3
         
-    # --- REGLA ESTRICTA DE SEGURIDAD ---
     if salida_tipo == "Urgencia" and v_horario == "Nocturno":
         nivel_riesgo_calculado = 3
     
@@ -727,20 +706,15 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
         color_semaforo = "green"
         aprobacion_estado = "AUTORIZADO (Auto-Aprobado)"
     else:
-        if nivel_riesgo_calculado < 3:
-            color_semaforo = "orange"
-        else:
-            color_semaforo = "red"
+        if nivel_riesgo_calculado < 3: color_semaforo = "orange"
+        else: color_semaforo = "red"
         aprobacion_estado = f"PENDIENTE (Requiere Nivel {nivel_riesgo_calculado})"
 
     st.markdown("---")
     st.subheader("📋 Resultado")
-    if color_semaforo == "green": 
-        st.success(f"**{aprobacion_estado}** | Riesgo Nivel {nivel_riesgo_calculado} | {puntos_totales} pts")
-    elif color_semaforo == "orange": 
-        st.warning(f"**{aprobacion_estado}** | Riesgo Nivel {nivel_riesgo_calculado} | {puntos_totales} pts")
-    else: 
-        st.error(f"**{aprobacion_estado}** | Riesgo Nivel {nivel_riesgo_calculado} | {puntos_totales} pts")
+    if color_semaforo == "green": st.success(f"**{aprobacion_estado}** | Riesgo Nivel {nivel_riesgo_calculado} | {puntos_totales} pts")
+    elif color_semaforo == "orange": st.warning(f"**{aprobacion_estado}** | Riesgo Nivel {nivel_riesgo_calculado} | {puntos_totales} pts")
+    else: st.error(f"**{aprobacion_estado}** | Riesgo Nivel {nivel_riesgo_calculado} | {puntos_totales} pts")
 
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
@@ -750,111 +724,54 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             
     with col_btn2:
         if st.button("CONFIRMAR VIAJE"):
-            
             duracion_valida = False
             if dur_horas is not None and dur_minutos is not None:
-                if dur_horas > 0 or dur_minutos > 0:
-                    duracion_valida = True
+                if dur_horas > 0 or dur_minutos > 0: duracion_valida = True
             
             campos_ok = all([
-                origen_txt.strip() != "", 
-                destino_txt.strip() != "", 
-                duracion_valida,
-                vehiculo_sel != "⚠️ Cargar flota en Admin",
-                not vehiculo_inhabilitado, # <--- CANDADO ACTIVADO
-                salida_tipo is not None, 
-                v_distancia is not None, 
-                v_clima is not None, 
-                v_pasajeros is not None, 
-                v_camino is not None, 
-                v_sueno is not None, 
-                v_horas_servicio is not None, 
-                v_escolta is not None, 
-                v_horario is not None, 
+                origen_txt.strip() != "", destino_txt.strip() != "", duracion_valida,
+                vehiculo_sel != "⚠️ Cargar flota en Admin", not vehiculo_inhabilitado,
+                salida_tipo is not None, v_distancia is not None, v_clima is not None, 
+                v_pasajeros is not None, v_camino is not None, v_sueno is not None, 
+                v_horas_servicio is not None, v_escolta is not None, v_horario is not None, 
                 v_comunicacion is not None
             ])
             
-            if not campos_ok: 
-                st.error("⛔ Faltan datos por responder o la duración de viaje no fue completada.")
-            elif v_pasajeros == "Con pasajeros" and pasajeros_detalle.strip() == "": 
-                st.error("⚠️ Ingrese nombres de pasajeros.")
+            if not campos_ok: st.error("⛔ Faltan datos por responder o la duración de viaje no fue completada.")
+            elif v_pasajeros == "Con pasajeros" and pasajeros_detalle.strip() == "": st.error("⚠️ Ingrese nombres de pasajeros.")
             else:
                 duracion_final_txt = f"{int(dur_horas):02d}:{int(dur_minutos):02d} Hs"
-                
                 nuevo_id = obtener_siguiente_id()
                 hora_str = datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                 
-                alarma_noche = "apagada"
-                if v_horario == "Nocturno":
-                    alarma_noche = "encendida"
-                    
-                aprobacion_db = "🔴 Pendiente"
-                aprobador_db = "Pendiente"
-                fecha_aprobacion_db = "Pendiente"
-                estado_viaje_db = "En espera"
+                alarma_noche = "encendida" if v_horario == "Nocturno" else "apagada"
+                aprobacion_db, aprobador_db, fecha_aprobacion_db, estado_viaje_db = "🔴 Pendiente", "Pendiente", "Pendiente", "En espera"
                 
                 if color_semaforo == "green":
-                    aprobacion_db = "🟢 Aprobado"
-                    aprobador_db = nombre_chofer
-                    fecha_aprobacion_db = hora_str
-                    estado_viaje_db = "En viaje"
+                    aprobacion_db, aprobador_db, fecha_aprobacion_db, estado_viaje_db = "🟢 Aprobado", nombre_chofer, hora_str, "En viaje"
                 
                 datos = {
-                    "ID": nuevo_id, 
-                    "Regional": regional_usuario,
-                    "Fecha": hora_str, 
-                    "Chofer": nombre_chofer, 
-                    "Sector": sector_usuario, 
-                    "Cargo": rol_usuario, 
-                    "Vehiculo": vehiculo_sel, 
-                    "Duracion": duracion_final_txt, 
-                    "Salida": salida_tipo, 
-                    "Alarma Nocturna": alarma_noche, 
-                    "Origen": origen_txt, 
-                    "Destino": destino_txt, 
-                    "Estado": aprobacion_estado, 
-                    "Puntaje": puntos_totales, 
-                    "Nivel": nivel_riesgo_calculado, 
-                    "Aprobacion": aprobacion_db, 
-                    "Aprobador": aprobador_db, 
-                    "Fecha_Aprobacion": fecha_aprobacion_db, 
-                    "Estado_Viaje": estado_viaje_db, 
-                    "Fecha_Fin": "En curso", 
+                    "ID": nuevo_id, "Regional": regional_usuario, "Fecha": hora_str, 
+                    "Chofer": nombre_chofer, "Sector": sector_usuario, "Cargo": rol_usuario, 
+                    "Vehiculo": vehiculo_sel, "Duracion": duracion_final_txt, "Salida": salida_tipo, 
+                    "Alarma Nocturna": alarma_noche, "Origen": origen_txt, "Destino": destino_txt, 
+                    "Estado": aprobacion_estado, "Puntaje": puntos_totales, "Nivel": nivel_riesgo_calculado, 
+                    "Aprobacion": aprobacion_db, "Aprobador": aprobador_db, "Fecha_Aprobacion": fecha_aprobacion_db, 
+                    "Estado_Viaje": estado_viaje_db, "Fecha_Fin": "En curso", 
                     "Test_Chofer": st.session_state.get("test_chofer"), 
                     "Inspeccion_Vehiculo": st.session_state.get("inspeccion_vehiculo"), 
                     "Checklist_Eq": st.session_state.get("resp_eq", {}), 
                     "Checklist_Doc": st.session_state.get("resp_doc", {}), 
-                    "R_Distancia": v_distancia, 
-                    "R_Clima": v_clima, 
-                    "R_Pasajeros": v_pasajeros, 
-                    "Detalle_Pasajeros": pasajeros_detalle, 
-                    "R_Camino": v_camino, 
-                    "R_Sueno": v_sueno, 
-                    "R_Horas": v_horas_servicio, 
-                    "R_Escolta": v_escolta, 
-                    "R_Com": v_comunicacion
+                    "R_Distancia": v_distancia, "R_Clima": v_clima, "R_Pasajeros": v_pasajeros, 
+                    "Detalle_Pasajeros": pasajeros_detalle, "R_Camino": v_camino, "R_Sueno": v_sueno, 
+                    "R_Horas": v_horas_servicio, "R_Escolta": v_escolta, "R_Com": v_comunicacion
                 }
                 
                 if guardar_en_nube(datos):
                     st.balloons()
-                    
-                    if color_semaforo == "green":
-                        cabecera_wa = f"🟢 *VIAJE AUTO-APROBADO ID {nuevo_id}*"
-                        pie_wa = f"👉 *Aprobado automáticamente por sistema.*"
-                    else:
-                        cabecera_wa = f"🔴 *NUEVA SOLICITUD ID {nuevo_id}*"
-                        pie_wa = f"👉 *Por favor, apruebe en la plataforma MARBAR.*"
-
-                    tkt = (
-                        f"{cabecera_wa}\n\n"
-                        f"🔹 *Chofer:* {nombre_chofer}\n"
-                        f"🔹 *Vehículo:* {vehiculo_sel}\n"
-                        f"🔹 *Origen:* {origen_txt}\n"
-                        f"🔹 *Destino:* {destino_txt}\n"
-                        f"🔹 *Duración:* {duracion_final_txt}\n"
-                        f"🔹 *Riesgo:* Nivel {nivel_riesgo_calculado}\n\n"
-                        f"{pie_wa}"
-                    )
+                    cabecera_wa = f"🟢 *VIAJE AUTO-APROBADO ID {nuevo_id}*" if color_semaforo == "green" else f"🔴 *NUEVA SOLICITUD ID {nuevo_id}*"
+                    pie_wa = f"👉 *Aprobado automáticamente por sistema.*" if color_semaforo == "green" else f"👉 *Por favor, apruebe en la plataforma MARBAR.*"
+                    tkt = f"{cabecera_wa}\n\n🔹 *Chofer:* {nombre_chofer}\n🔹 *Vehículo:* {vehiculo_sel}\n🔹 *Origen:* {origen_txt}\n🔹 *Destino:* {destino_txt}\n🔹 *Duración:* {duracion_final_txt}\n🔹 *Riesgo:* Nivel {nivel_riesgo_calculado}\n\n{pie_wa}"
                     
                     st.markdown(f"### [📱 ENVIAR TICKET](https://wa.me/?text={urllib.parse.quote(tkt)})")
                     st.success("Guardado Exitoso.")
@@ -865,37 +782,26 @@ elif st.session_state["paso_actual"] == "Historial":
     st.subheader("📜 Historial")
     viajes_historicos = db.collection(COLECCION_VIAJES).stream()
     lista_historica = []
-    for doc in viajes_historicos:
-        lista_historica.append(doc.to_dict())
+    for doc in viajes_historicos: lista_historica.append(doc.to_dict())
         
     df_h = pd.DataFrame(lista_historica)
-    
     if not df_h.empty:
-        if st.session_state["usuario_actual"] != "ADMIN": 
-            df_h = df_h[df_h["Chofer"] == st.session_state["nombre_empleado"]]
-            
+        if st.session_state["usuario_actual"] != "ADMIN": df_h = df_h[df_h["Chofer"] == st.session_state["nombre_empleado"]]
         if not df_h.empty:
             df_h = df_h.sort_values(by="ID", ascending=False)
             st.dataframe(df_h[['ID', 'Fecha', 'Origen', 'Destino', 'Estado_Viaje']], hide_index=True, use_container_width=True)
-            
             st.markdown("---")
             st.write("#### 📥 Extraer Ficha Auditada (PDF/HTML)")
             
             op_dd = [""]
-            for _, r in df_h.iterrows():
-                op_dd.append(f"{r['ID']} - {r.get('Chofer','')} - {r.get('Fecha','')[:10]}")
-                
+            for _, r in df_h.iterrows(): op_dd.append(f"{r['ID']} - {r.get('Chofer','')} - {r.get('Fecha','')[:10]}")
             v_sel = st.selectbox("Seleccione viaje:", op_dd)
             
             if v_sel != "":
                 id_ext = v_sel.split(" - ")[0]
                 d_v = df_h[df_h["ID"].astype(str) == id_ext].iloc[0]
-                
-                reporte_html = generar_ficha_html(d_v)
-                st.download_button("📥 Descargar Ficha PDF", reporte_html, f"MARBAR_Auditoria_{id_ext}.html", mime="text/html")
-                
-        else:
-            st.info("No hay viajes en el historial.")
+                st.download_button("📥 Descargar Ficha PDF", generar_ficha_html(d_v), f"MARBAR_Auditoria_{id_ext}.html", mime="text/html")
+        else: st.info("No hay viajes en el historial.")
             
     if st.button("⬅️ Menú"): 
         st.session_state["paso_actual"] = "Menu"
@@ -904,15 +810,10 @@ elif st.session_state["paso_actual"] == "Historial":
 # --- 6. SIDEBAR ---
 if st.session_state["usuario_actual"]:
     with st.sidebar:
-        if os.path.exists("logo.png"): 
-            st.image("logo.png", use_column_width=True)
-            
+        if os.path.exists("logo.png"): st.image("logo.png", use_column_width=True)
         st.header("📊 SSA & Logística")
         
-        # --- BOTÓN DE ACTUALIZACIÓN (NO PIERDE LA SESIÓN) ---
-        if st.button("🔄 Actualizar Pantalla", use_container_width=True):
-            st.rerun()
-            
+        if st.button("🔄 Actualizar Pantalla", use_container_width=True): st.rerun()
         if st.button("🚪 Cerrar Sesión", use_container_width=True): 
             st.session_state.clear()
             st.rerun()
@@ -920,176 +821,102 @@ if st.session_state["usuario_actual"]:
     try:
         viajes_sidebar = db.collection(COLECCION_VIAJES).stream()
         lista_sidebar = []
-        for d in viajes_sidebar:
-            lista_sidebar.append(d.to_dict())
-            
+        for d in viajes_sidebar: lista_sidebar.append(d.to_dict())
         df_sb = pd.DataFrame(lista_sidebar)
         
         if not df_sb.empty:
             hoy = datetime.now(TZ_AR).strftime("%d/%m/%Y")
-            mes_actual = datetime.now(TZ_AR).strftime("/%m/%Y") # Formato /MM/YYYY para asegurar la búsqueda
-            
-            # Filtros de datos
+            mes_actual = datetime.now(TZ_AR).strftime("/%m/%Y")
             df_hoy = df_sb[df_sb['Fecha'].str.contains(hoy, na=False)]
             df_mes = df_sb[df_sb['Fecha'].str.contains(mes_actual, na=False)]
             df_p = df_hoy[df_hoy['Aprobacion'].str.contains("Pendiente", na=False)]
             df_r = df_sb[df_sb['Estado_Viaje'] == "En viaje"]
 
-            # --- 1. MÉTRICAS GLOBALES (VISIBLES PARA TODOS) ---
             with st.sidebar:
                 st.markdown("---")
                 st.subheader("📈 Resumen de Operaciones")
-                
-                # Primera fila de métricas (Hoy y Ruta)
                 col_met1, col_met2 = st.columns(2)
                 col_met1.metric("Viajes Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pend." if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
                 col_met2.metric("En Ruta", str(len(df_r)))
-                
-                # Segunda fila de métricas (Mensual e Histórico)
                 col_met3, col_met4 = st.columns(2)
                 col_met3.metric("Este Mes", str(len(df_mes)))
                 col_met4.metric("Histórico", str(len(df_sb)))
             
-            # --- 2. LISTADOS DE VIAJES ---
             with st.sidebar:
                 st.markdown("---")
                 st.write("⚠️ **Pendientes (Hoy):**")
-            
-            if not df_p.empty:
-                st.sidebar.dataframe(df_p[['Chofer', 'Destino']], hide_index=True)
-            else:
-                st.sidebar.write("✅ Al día.")
+            if not df_p.empty: st.sidebar.dataframe(df_p[['Chofer', 'Destino']], hide_index=True)
+            else: st.sidebar.write("✅ Al día.")
                 
             with st.sidebar:
                 st.markdown("---")
                 st.write("🚚 **En Ruta:**")
-            
-            if not df_r.empty:
-                st.sidebar.dataframe(df_r[['Chofer', 'Destino']], hide_index=True)
-            else:
-                st.sidebar.write("✅ Ninguna.")
+            if not df_r.empty: st.sidebar.dataframe(df_r[['Chofer', 'Destino']], hide_index=True)
+            else: st.sidebar.write("✅ Ninguna.")
 
-            # --- 3. BÚSQUEDA DE FICHA RÁPIDA ---
             with st.sidebar:
                 st.markdown("---")
                 st.subheader("📜 Ficha Rápida")
-            
             df_sb_ord = df_sb.sort_values(by="ID", ascending=False)
             op_sb = [""]
-            for _, r in df_sb_ord.iterrows():
-                op_sb.append(f"{r['ID']} - {r.get('Chofer','')}")
-                
-            with st.sidebar:
-                v_sb = st.selectbox("Buscar ID:", op_sb, key="sb_aud")
+            for _, r in df_sb_ord.iterrows(): op_sb.append(f"{r['ID']} - {r.get('Chofer','')}")
+            with st.sidebar: v_sb = st.selectbox("Buscar ID:", op_sb, key="sb_aud")
             
             if v_sb != "":
                 id_sb = v_sb.split(" - ")[0]
                 d_sb = df_sb[df_sb["ID"].astype(str) == id_sb].iloc[0]
-                
-                reporte_sb_html = generar_ficha_html(d_sb)
                 with st.sidebar:
-                    st.download_button(
-                        label="📥 Descargar Ficha PDF", 
-                        data=reporte_sb_html, 
-                        file_name=f"MARBAR_Auditoria_{id_sb}.html", 
-                        mime="text/html",
-                        key="btn_sb_txt"
-                    )
+                    st.download_button(label="📥 Descargar Ficha PDF", data=generar_ficha_html(d_sb), file_name=f"MARBAR_Auditoria_{id_sb}.html", mime="text/html", key="btn_sb_txt")
 
-            # --- 4. CONSOLA EXCEL (RESTRINGIDA A MANDOS Y ADMIN) ---
             if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
                 with st.sidebar:
                     st.markdown("---")
                     st.subheader("📊 Consola Excel")
-                
-                cols = [
-                    'ID', 'Regional', 'Fecha', 'Chofer', 'Sector', 'Cargo', 'Vehiculo', 'Duracion', 
-                    'Salida', 'Alarma Nocturna', 'Origen', 'Destino', 'Estado', 'Puntaje', 
-                    'Nivel', 'Aprobacion', 'Aprobador', 'Fecha_Aprobacion', 'Estado_Viaje', 'Fecha_Fin'
-                ]
-                
+                cols = ['ID', 'Regional', 'Fecha', 'Chofer', 'Sector', 'Cargo', 'Vehiculo', 'Duracion', 'Salida', 'Alarma Nocturna', 'Origen', 'Destino', 'Estado', 'Puntaje', 'Nivel', 'Aprobacion', 'Aprobador', 'Fecha_Aprobacion', 'Estado_Viaje', 'Fecha_Fin']
                 for c in cols: 
-                    if c not in df_sb.columns: 
-                        df_sb[c] = "N/A"
-                        
+                    if c not in df_sb.columns: df_sb[c] = "N/A"
                 df_ex = df_sb[cols].sort_values(by="ID", ascending=False).copy()
-                
-                # Cálculo de duración real en Excel
                 df_ex['Duracion_Real_Viaje'] = df_ex.apply(lambda r: calcular_duracion_real(r.get('Fecha', ''), r.get('Fecha_Fin', '')), axis=1)
                 
-                # Creación del Excel en formato tabla 
                 bx = io.BytesIO()
                 with pd.ExcelWriter(bx, engine='openpyxl') as wr: 
                     df_ex.to_excel(wr, index=False, sheet_name='Auditoria_Viajes')
                     worksheet = wr.sheets['Auditoria_Viajes']
-                    
                     filas = worksheet.max_row
                     columnas = worksheet.max_column
-                    
                     if filas > 1:
-                        letra_final = get_column_letter(columnas)
-                        rango_tabla = f"A1:{letra_final}{filas}"
-                        
-                        tabla = Table(displayName="TablaAuditoria", ref=rango_tabla)
-                        estilo = TableStyleInfo(
-                            name="TableStyleMedium9", 
-                            showFirstColumn=False, 
-                            showLastColumn=False, 
-                            showRowStripes=True, 
-                            showColumnStripes=False
-                        )
-                        tabla.tableStyleInfo = estilo
+                        tabla = Table(displayName="TablaAuditoria", ref=f"A1:{get_column_letter(columnas)}{filas}")
+                        tabla.tableStyleInfo = TableStyleInfo(name="TableStyleMedium9", showFirstColumn=False, showLastColumn=False, showRowStripes=True, showColumnStripes=False)
                         worksheet.add_table(tabla)
-                    
-                with st.sidebar:
-                    st.download_button("📥 Auditoría (Excel)", bx.getvalue(), f"Auditoria_MARBAR_{hoy.replace('/','-')}.xlsx", key="btn_ex")
-                
-    except Exception as e_sidebar: 
-        pass
+                with st.sidebar: st.download_button("📥 Auditoría (Excel)", bx.getvalue(), f"Auditoria_MARBAR_{hoy.replace('/','-')}.xlsx", key="btn_ex")
+    except Exception as e_sidebar: pass
 
 # --- 7. BANDEJA APROBACIONES ---
 if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
     st.markdown("---")
     st.title("📥 Bandeja de Validaciones")
-    
-    mapa_autoridad = {
-        "Chofer": 0, 
-        "Supervisor / Coordinador / Ingeniero": 1, 
-        "Jefe de Servicio": 2, 
-        "Gerencia": 3, 
-        "ADMIN": 3
-    }
-    mi_nivel = mapa_autoridad.get(st.session_state["usuario_actual"], 0)
+    mi_nivel = {"Chofer": 0, "Supervisor / Coordinador / Ingeniero": 1, "Jefe de Servicio": 2, "Gerencia": 3, "ADMIN": 3}.get(st.session_state["usuario_actual"], 0)
     
     try:
         solicitudes_pendientes = db.collection(COLECCION_VIAJES).where("Aprobacion", "==", "🔴 Pendiente").stream()
         p_list = []
-        for doc in solicitudes_pendientes:
-            p_list.append(doc.to_dict())
+        for doc in solicitudes_pendientes: p_list.append(doc.to_dict())
             
         if p_list:
             for v_p in p_list:
                 nivel_viaje = v_p.get("Nivel", 1)
-                
                 with st.expander(f"🚨 ID: {v_p['ID']} | Conductor: {v_p['Chofer']} | Riesgo Nivel {nivel_viaje}"):
                     st.write(f"**Ruta:** {v_p['Origen']} -> {v_p['Destino']} ({v_p['Puntaje']} pts)")
-                    
                     if mi_nivel >= nivel_viaje:
                         if st.button(f"✍️ Aprobar {v_p['ID']}", key=f"btn_ap_{v_p['ID']}"):
                             db.collection(COLECCION_VIAJES).document(str(v_p['ID'])).update({
-                                "Aprobacion": "🟢 Aprobado", 
-                                "Aprobador": st.session_state["nombre_empleado"], 
-                                "Fecha_Aprobacion": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S"), 
-                                "Estado_Viaje": "En viaje"
+                                "Aprobacion": "🟢 Aprobado", "Aprobador": st.session_state["nombre_empleado"], 
+                                "Fecha_Aprobacion": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S"), "Estado_Viaje": "En viaje"
                             })
                             st.rerun()
-                    else:
-                        st.error(f"🔒 Usted es {st.session_state['usuario_actual']} (Nivel {mi_nivel}). Este gerenciamiento exige firma de Nivel {nivel_viaje}.")
-        else: 
-            st.info("✅ Bandeja limpia.")
-            
-    except Exception as e_bandeja: 
-        pass
+                    else: st.error(f"🔒 Usted es {st.session_state['usuario_actual']} (Nivel {mi_nivel}). Este gerenciamiento exige firma de Nivel {nivel_viaje}.")
+        else: st.info("✅ Bandeja limpia.")
+    except Exception as e_bandeja: pass
 
 # --- 8. ADMIN ---
 if st.session_state["usuario_actual"] == "ADMIN":
@@ -1098,7 +925,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
     t1, t2, t3 = st.tabs(["👥 Usuarios", "🚘 Flota", "⚡ Carga Masiva"])
     
     with t1:
-        st.info("💡 En este panel puedes gestionar los perfiles de los usuarios en Firebase. Recuerda que la contraseña ya no se usa aquí, sino que se gestiona mediante Auth0.")
+        st.info("💡 Creación manual de perfiles operativos. El sistema enviará un correo automático de configuración al empleado.")
         adm_email = st.text_input("Correo Electrónico Oficial:").strip().lower()
         adm_nombre = st.text_input("Nombre y Apellido Real:").strip()
         adm_dni = st.text_input("DNI:").strip()
@@ -1106,53 +933,37 @@ if st.session_state["usuario_actual"] == "ADMIN":
         adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia", "Completacion"])
         adm_rol = st.selectbox("Rol:", ["Chofer", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "ADMIN"])
         
-        # --- NUEVOS SELECTORES PARA CONTROL DE VENCIMIENTO DOCUMENTAL ---
         col_v1, col_v2 = st.columns(2)
-        with col_v1:
-            adm_venc_lic = st.date_input("Vencimiento Carnet de Manejo:", value=datetime.now(TZ_AR).date())
-        with col_v2:
-            adm_venc_def = date_input("Vencimiento Conducción Defensiva:", value=datetime.now(TZ_AR).date())
+        with col_v1: adm_venc_lic = st.date_input("Vencimiento Carnet de Manejo:", value=datetime.now(TZ_AR).date())
+        with col_v2: adm_venc_def = st.date_input("Vencimiento Conducción Defensiva:", value=datetime.now(TZ_AR).date())
         
         if st.button("💾 Asignar Perfil Operativo"):
             if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
                 try:
-                    # 1. Creamos el casillero de autenticación en segundo plano con una clave aleatoria temporal
                     try:
                         pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                         auth.create_user(email=adm_email, password=pass_temporal)
-                    except Exception:
-                        pass # Si falla (por ej, porque el correo ya existe), lo ignoramos silenciosamente
+                        url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
+                        requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": adm_email})
+                    except Exception: pass
                     
-                    # 2. Guardamos el perfil operativo en la base de datos (Firestore) como siempre
                     db.collection("usuarios").document(adm_dni).set({
-                        "DNI_Usuario": adm_dni, 
-                        "Nombre": adm_nombre, 
-                        "Email": adm_email, 
-                        "Regional": adm_regional,
-                        "Rol": adm_rol, 
-                        "Sector": adm_sector,
-                        "Venc_Licencia": adm_venc_lic.strftime("%d/%m/%Y"),
+                        "DNI_Usuario": adm_dni, "Nombre": adm_nombre, "Email": adm_email, "Regional": adm_regional,
+                        "Rol": adm_rol, "Sector": adm_sector, "Venc_Licencia": adm_venc_lic.strftime("%d/%m/%Y"),
                         "Venc_Defensiva": adm_venc_def.strftime("%d/%m/%Y")
                     })
-                    
-                    st.success(f"✅ ¡Perfil asignado con éxito! Indique al usuario que use la opción 'Configurar contraseña por primera vez' en la pantalla de inicio utilizando su correo ({adm_email}).")
+                    st.success(f"✅ ¡Perfil asignado con éxito! Se ha enviado un correo a {adm_email} para que configure su contraseña.")
                     st.rerun()
-                except Exception as e: 
-                    st.error(f"Error de Firebase: {e}")
-            else: 
-                st.error("Complete todos los campos de texto, incluyendo la Regional.")
+                except Exception as e: st.error(f"Error de Firebase: {e}")
+            else: st.error("Complete todos los campos de texto, incluyendo la Regional.")
                 
         df_u = obtener_usuarios()
         if not df_u.empty:
             st.dataframe(df_u, hide_index=True)
-            
             lista_borrar_u = [""]
             for index, row in df_u.iterrows():
-                if row.get("Rol") != "ADMIN" and row.get("Email") != "admin@marbar.com":
-                    lista_borrar_u.append(row["DNI_Usuario"])
-                
+                if row.get("Rol") != "ADMIN" and row.get("Email") != "admin@marbar.com": lista_borrar_u.append(row["DNI_Usuario"])
             elim_u = st.selectbox("Borrar Perfil Operativo (DNI):", lista_borrar_u)
-            
             if st.button("❌ Dar de Baja"): 
                 if elim_u.strip() != "": 
                     db.collection("usuarios").document(elim_u.strip()).delete()
@@ -1161,33 +972,22 @@ if st.session_state["usuario_actual"] == "ADMIN":
     with t2:
         st.info("💡 Agregue las unidades de la flota y su documentación. El sistema bloqueará automáticamente los viajes si la VTV o el Seguro están vencidos.")
         adm_pat = st.text_input("Patente / Interno:").strip()
-        
         col_vtv, col_seg = st.columns(2)
-        with col_vtv:
-            adm_venc_vtv = st.date_input("Vencimiento VTV:", value=datetime.now(TZ_AR).date())
-        with col_seg:
-            adm_venc_seguro = st.date_input("Vencimiento Seguro:", value=datetime.now(TZ_AR).date())
+        with col_vtv: adm_venc_vtv = st.date_input("Vencimiento VTV:", value=datetime.now(TZ_AR).date())
+        with col_seg: adm_venc_seguro = st.date_input("Vencimiento Seguro:", value=datetime.now(TZ_AR).date())
         
         if st.button("💾 Agregar Equipo"):
             if adm_pat != "": 
-                db.collection("vehiculos").document(adm_pat).set({
-                    "Vehiculo": adm_pat,
-                    "Venc_VTV": adm_venc_vtv.strftime("%d/%m/%Y"),
-                    "Venc_Seguro": adm_venc_seguro.strftime("%d/%m/%Y")
-                })
+                db.collection("vehiculos").document(adm_pat).set({"Vehiculo": adm_pat, "Venc_VTV": adm_venc_vtv.strftime("%d/%m/%Y"), "Venc_Seguro": adm_venc_seguro.strftime("%d/%m/%Y")})
                 st.success(f"Unidad {adm_pat} guardada correctamente.")
                 st.rerun()
                 
         df_v = obtener_vehiculos()
         if not df_v.empty:
             st.dataframe(df_v, hide_index=True)
-            
             lista_borrar_v = [""]
-            for vh in df_v["Vehiculo"].tolist():
-                lista_borrar_v.append(vh)
-                
+            for vh in df_v["Vehiculo"].tolist(): lista_borrar_v.append(vh)
             elim_v = st.selectbox("Borrar Equipo:", lista_borrar_v)
-            
             if st.button("❌ Retirar Unidad"): 
                 if elim_v.strip() != "": 
                     db.collection("vehiculos").document(elim_v.strip()).delete()
@@ -1195,67 +995,51 @@ if st.session_state["usuario_actual"] == "ADMIN":
 
     with t3:
         st.subheader("⚡ Carga Masiva de Datos")
-        
-        # --- CARGA MASIVA DE USUARIOS ---
         st.markdown("#### 👥 1. Carga de Usuarios")
-        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva** (el orden no importa).")
+        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva**.")
         archivo_usuarios = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"], key="up_usu")
         
         if archivo_usuarios is not None:
             df_masivo_u = pd.read_excel(archivo_usuarios)
-            # Intentar formatear las columnas de fecha si existen (de datetime a string DD/MM/YYYY)
             for col_fecha in ["Venc_Licencia", "Venc_Defensiva"]:
-                if col_fecha in df_masivo_u.columns:
-                    df_masivo_u[col_fecha] = pd.to_datetime(df_masivo_u[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
-            
+                if col_fecha in df_masivo_u.columns: df_masivo_u[col_fecha] = pd.to_datetime(df_masivo_u[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
             st.dataframe(df_masivo_u.head())
             
             if st.button("🚀 Procesar Usuarios en Firebase"):
                 barra_u = st.progress(0)
                 tot_u = len(df_masivo_u)
+                url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
                 for i, row in df_masivo_u.iterrows():
                     dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
                     email_str = str(row.get("Email", "")).strip().lower()
-                    
                     if dni_str and dni_str != "nan" and email_str and email_str != "nan":
                         try:
-                            # 1. Registramos de forma masiva en el motor de autenticación
                             try:
                                 pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                                 auth.create_user(email=email_str, password=pass_temporal)
-                            except Exception:
-                                pass # Si falla (por ej, porque el correo ya existe), seguimos con la base de datos
+                                requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
+                            except Exception: pass 
                             
-                            # 2. Guardamos en la base de datos Firestore
                             db.collection("usuarios").document(dni_str).set({
-                                "DNI_Usuario": dni_str, 
-                                "Nombre": str(row.get("Nombre", "")), 
-                                "Email": email_str, 
-                                "Regional": str(row.get("Regional", "")),
-                                "Rol": str(row.get("Rol", "")), 
-                                "Sector": str(row.get("Sector", "")),
+                                "DNI_Usuario": dni_str, "Nombre": str(row.get("Nombre", "")), "Email": email_str, 
+                                "Regional": str(row.get("Regional", "")), "Rol": str(row.get("Rol", "")), "Sector": str(row.get("Sector", "")),
                                 "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
                                 "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A")
                             })
-                        except Exception:
-                            pass
+                        except Exception: pass
                     barra_u.progress((i + 1) / tot_u)
-                st.success(f"✅ ¡{tot_u} usuarios procesados e integrados al sistema de credenciales!")
+                st.success(f"✅ ¡{tot_u} usuarios procesados! Se les ha enviado el correo de configuración automáticamente a los correos nuevos.")
                 st.rerun()
 
         st.markdown("---")
-        
-        # --- CARGA MASIVA DE VEHÍCULOS ---
         st.markdown("#### 🚘 2. Carga de Vehículos")
-        st.info("El Excel debe contener las columnas: **Vehiculo, Venc_VTV, Venc_Seguro** (el orden no importa).")
+        st.info("El Excel debe contener las columnas: **Vehiculo, Venc_VTV, Venc_Seguro**.")
         archivo_vehiculos = st.file_uploader("Subir planilla de flota (.xlsx)", type=["xlsx"], key="up_veh")
         
         if archivo_vehiculos is not None:
             df_masivo_v = pd.read_excel(archivo_vehiculos)
             for col_fecha in ["Venc_VTV", "Venc_Seguro"]:
-                if col_fecha in df_masivo_v.columns:
-                    df_masivo_v[col_fecha] = pd.to_datetime(df_masivo_v[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
-            
+                if col_fecha in df_masivo_v.columns: df_masivo_v[col_fecha] = pd.to_datetime(df_masivo_v[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
             st.dataframe(df_masivo_v.head())
             
             if st.button("🚀 Procesar Vehículos en Firebase"):
@@ -1265,8 +1049,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     veh_str = str(row.get("Vehiculo", "")).strip()
                     if veh_str and veh_str != "nan":
                         db.collection("vehiculos").document(veh_str).set({
-                            "Vehiculo": veh_str,
-                            "Venc_VTV": str(row.get("Venc_VTV", "N/A")).replace("nan", "N/A"),
+                            "Vehiculo": veh_str, "Venc_VTV": str(row.get("Venc_VTV", "N/A")).replace("nan", "N/A"),
                             "Venc_Seguro": str(row.get("Venc_Seguro", "N/A")).replace("nan", "N/A")
                         })
                     barra_v.progress((i + 1) / tot_v)
