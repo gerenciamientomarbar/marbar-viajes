@@ -11,10 +11,7 @@ import random
 import string
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
-
-# --- NUEVAS LIBRERÍAS PARA AUTH0 ---
 import requests
-import jwt
 
 # -----------------------------------------
 # CONFIGURACIÓN DE PÁGINA
@@ -29,7 +26,7 @@ st.set_page_config(
 # VARIABLES GLOBALES Y FIREBASE
 # -----------------------------------------
 import firebase_admin
-from firebase_admin import credentials, firestore, auth, exceptions
+from firebase_admin import credentials, firestore, auth
 
 # --- CONFIGURACIÓN DE LA BASE DE DATOS CENTRAL ---
 COLECCION_VIAJES = "viajes"
@@ -766,7 +763,6 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                 vehiculo_sel != "⚠️ Cargar flota en Admin",
                 not vehiculo_inhabilitado, # <--- CANDADO ACTIVADO
                 salida_tipo is not None, 
-                # ... (siguen los demás) 
                 v_distancia is not None, 
                 v_clima is not None, 
                 v_pasajeros is not None, 
@@ -1115,7 +1111,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
         with col_v1:
             adm_venc_lic = st.date_input("Vencimiento Carnet de Manejo:", value=datetime.now(TZ_AR).date())
         with col_v2:
-            adm_venc_def = st.date_input("Vencimiento Conducción Defensiva:", value=datetime.now(TZ_AR).date())
+            adm_venc_def = date_input("Vencimiento Conducción Defensiva:", value=datetime.now(TZ_AR).date())
         
         if st.button("💾 Asignar Perfil Operativo"):
             if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
@@ -1140,13 +1136,6 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     })
                     
                     st.success(f"✅ ¡Perfil asignado con éxito! Indique al usuario que use la opción 'Configurar contraseña por primera vez' en la pantalla de inicio utilizando su correo ({adm_email}).")
-                    st.rerun()
-                except Exception as e: 
-                    st.error(f"Error de Firebase: {e}")
-            else: 
-                st.error("Complete todos los campos de texto, incluyendo la Regional.")
-                    
-                    st.success(f"✅ ¡Perfil asignado con éxito! Ahora el usuario podrá ingresar a la aplicación usando su cuenta corporativa Auth0 ({adm_email}).")
                     st.rerun()
                 except Exception as e: 
                     st.error(f"Error de Firebase: {e}")
