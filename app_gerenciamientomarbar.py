@@ -129,7 +129,6 @@ def guardar_en_nube(datos_viaje):
         return False
 
 def calcular_duracion_real(fecha_inicio, fecha_fin):
-    """Calcula la diferencia exacta de tiempo entre la salida y la llegada"""
     if fecha_fin in ["En curso", "Pendiente", "N/A", "", None]:
         return "No finalizado"
     
@@ -140,8 +139,7 @@ def calcular_duracion_real(fecha_inicio, fecha_fin):
         diferencia = fin - inicio
         segundos = int(diferencia.total_seconds())
         
-        if segundos < 0:
-            return "Error de fechas"
+        if segundos < 0: return "Error de fechas"
             
         horas, resto = divmod(segundos, 3600)
         minutos, _ = divmod(resto, 60)
@@ -150,13 +148,10 @@ def calcular_duracion_real(fecha_inicio, fecha_fin):
         return "Error de cálculo"
 
 def generar_ficha_html(v_data):
-    """Genera la ficha corporativa de auditoría en formato HTML para impresión/PDF"""
-    
     def ordenar_por_numero(texto):
         try: return int(texto.split(".")[0])
         except: return 99
     
-    # Procesamiento del Equipamiento
     eq_html = ""
     chk_eq = v_data.get('Checklist_Eq', {})
     if chk_eq:
@@ -166,7 +161,6 @@ def generar_ficha_html(v_data):
             eq_html += f'<tr><td style="padding: 4px; border-bottom: 1px solid #f1f5f9; font-size: 9pt;">{k}</td><td style="text-align: right; font-weight: bold; width: 15%; color: {color};">{str(v).upper()}</td></tr>'
     else: eq_html = "<tr><td colspan='2'>Sin datos</td></tr>"
 
-    # Procesamiento de Documentación
     doc_html = ""
     chk_doc = v_data.get('Checklist_Doc', {})
     if chk_doc:
@@ -348,7 +342,7 @@ if st.session_state["usuario_actual"] is None:
                 else:
                     st.error("⛔ El correo no se encuentra registrado en el sistema. Verifique con el Administrador.")
             else:
-                st.error("Por favor, escribe un correo electrónico válido.")
+                st.error("Por favor, escriba un correo electrónico válido.")
     
     st.stop() 
 
@@ -938,9 +932,9 @@ if st.session_state["usuario_actual"] == "ADMIN":
         adm_rol = st.selectbox("Rol:", ["Conductor", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "ADMIN"])
         
         col_v1, col_v2, col_v3 = st.columns(3)
-        with col_v1: adm_venc_lic = st.date_input("Venc. Carnet Manejo:", value=datetime.now(TZ_AR).date())
-        with col_v2: adm_venc_def = st.date_input("Venc. Defensiva:", value=datetime.now(TZ_AR).date())
-        with col_v3: adm_venc_def_chile = st.date_input("Venc. Defensiva Chile:", value=datetime.now(TZ_AR).date())
+        with col_v1: adm_venc_lic = st.date_input("Venc. Carnet Manejo:", value=datetime.now(TZ_AR).date(), format="DD/MM/YYYY")
+        with col_v2: adm_venc_def = st.date_input("Venc. Defensiva:", value=datetime.now(TZ_AR).date(), format="DD/MM/YYYY")
+        with col_v3: adm_venc_def_chile = st.date_input("Venc. Defensiva Chile:", value=datetime.now(TZ_AR).date(), format="DD/MM/YYYY")
         
         if st.button("💾 Asignar Perfil Operativo"):
             if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
@@ -976,90 +970,90 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     db.collection("usuarios").document(elim_u.strip()).delete()
                     st.rerun()
 
-        with t2:
-            st.info("💡 Agregue las unidades de la flota y su documentación. El sistema bloqueará automáticamente los viajes si la VTV o el Seguro están vencidos.")
-            adm_pat = st.text_input("Patente / Interno:").strip()
-            col_vtv, col_seg = st.columns(2)
-            with col_vtv: adm_venc_vtv = st.date_input("Vencimiento VTV:", value=datetime.now(TZ_AR).date())
-            with col_seg: adm_venc_seguro = st.date_input("Vencimiento Seguro:", value=datetime.now(TZ_AR).date())
-            
-            if st.button("💾 Agregar Equipo"):
-                if adm_pat != "": 
-                    db.collection("vehiculos").document(adm_pat).set({"Vehiculo": adm_pat, "Venc_VTV": adm_venc_vtv.strftime("%d/%m/%Y"), "Venc_Seguro": adm_venc_seguro.strftime("%d/%m/%Y")})
-                    st.success(f"Unidad {adm_pat} guardada correctamente.")
-                    st.rerun()
-                    
-            df_v = obtener_vehiculos()
-            if not df_v.empty:
-                st.dataframe(df_v, hide_index=True)
-                lista_borrar_v = [""]
-                for vh in df_v["Vehiculo"].tolist(): lista_borrar_v.append(vh)
-                elim_v = st.selectbox("Borrar Equipo:", lista_borrar_v)
-                if st.button("❌ Retirar Unidad"): 
-                    if elim_v.strip() != "": 
-                        db.collection("vehiculos").document(elim_v.strip()).delete()
-                        st.rerun()
-
-        with t3:
-            st.subheader("⚡ Carga Masiva de Datos")
-            st.markdown("#### 👥 1. Carga de Usuarios")
-            st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva, Venc_Def_Chile**.")
-            archivo_usuarios = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"], key="up_usu")
-            
-            if archivo_usuarios is not None:
-                df_masivo_u = pd.read_excel(archivo_usuarios)
-                for col_fecha in ["Venc_Licencia", "Venc_Defensiva", "Venc_Def_Chile"]:
-                    if col_fecha in df_masivo_u.columns: df_masivo_u[col_fecha] = pd.to_datetime(df_masivo_u[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
-                st.dataframe(df_masivo_u.head())
+    with t2:
+        st.info("💡 Agregue las unidades de la flota y su documentación. El sistema bloqueará automáticamente los viajes si la VTV o el Seguro están vencidos.")
+        adm_pat = st.text_input("Patente / Interno:").strip()
+        col_vtv, col_seg = st.columns(2)
+        with col_vtv: adm_venc_vtv = st.date_input("Vencimiento VTV:", value=datetime.now(TZ_AR).date(), format="DD/MM/YYYY")
+        with col_seg: adm_venc_seguro = st.date_input("Vencimiento Seguro:", value=datetime.now(TZ_AR).date(), format="DD/MM/YYYY")
+        
+        if st.button("💾 Agregar Equipo"):
+            if adm_pat != "": 
+                db.collection("vehiculos").document(adm_pat).set({"Vehiculo": adm_pat, "Venc_VTV": adm_venc_vtv.strftime("%d/%m/%Y"), "Venc_Seguro": adm_venc_seguro.strftime("%d/%m/%Y")})
+                st.success(f"Unidad {adm_pat} guardada correctamente.")
+                st.rerun()
                 
-                if st.button("🚀 Procesar Usuarios en Firebase"):
-                    barra_u = st.progress(0)
-                    tot_u = len(df_masivo_u)
-                    url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
-                    for i, row in df_masivo_u.iterrows():
-                        dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
-                        email_str = str(row.get("Email", "")).strip().lower()
-                        if dni_str and dni_str != "nan" and email_str and email_str != "nan":
+        df_v = obtener_vehiculos()
+        if not df_v.empty:
+            st.dataframe(df_v, hide_index=True)
+            lista_borrar_v = [""]
+            for vh in df_v["Vehiculo"].tolist(): lista_borrar_v.append(vh)
+            elim_v = st.selectbox("Borrar Equipo:", lista_borrar_v)
+            if st.button("❌ Retirar Unidad"): 
+                if elim_v.strip() != "": 
+                    db.collection("vehiculos").document(elim_v.strip()).delete()
+                    st.rerun()
+
+    with t3:
+        st.subheader("⚡ Carga Masiva de Datos")
+        st.markdown("#### 👥 1. Carga de Usuarios")
+        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva, Venc_Def_Chile**.")
+        archivo_usuarios = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"], key="up_usu")
+        
+        if archivo_usuarios is not None:
+            df_masivo_u = pd.read_excel(archivo_usuarios)
+            for col_fecha in ["Venc_Licencia", "Venc_Defensiva", "Venc_Def_Chile"]:
+                if col_fecha in df_masivo_u.columns: df_masivo_u[col_fecha] = pd.to_datetime(df_masivo_u[col_fecha], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
+            st.dataframe(df_masivo_u.head())
+            
+            if st.button("🚀 Procesar Usuarios en Firebase"):
+                barra_u = st.progress(0)
+                tot_u = len(df_masivo_u)
+                url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
+                for i, row in df_masivo_u.iterrows():
+                    dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
+                    email_str = str(row.get("Email", "")).strip().lower()
+                    if dni_str and dni_str != "nan" and email_str and email_str != "nan":
+                        try:
                             try:
-                                try:
-                                    pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-                                    auth.create_user(email=email_str, password=pass_temporal)
-                                    requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
-                                except Exception: pass 
-                                
-                                db.collection("usuarios").document(dni_str).set({
-                                    "DNI_Usuario": dni_str, "Nombre": str(row.get("Nombre", "")), "Email": email_str, 
-                                    "Regional": str(row.get("Regional", "")), "Rol": str(row.get("Rol", "")), "Sector": str(row.get("Sector", "")),
-                                    "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
-                                    "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A"),
-                                    "Venc_Def_Chile": str(row.get("Venc_Def_Chile", "N/A")).replace("nan", "N/A")
-                                })
-                            except Exception: pass
-                        barra_u.progress((i + 1) / tot_u)
-                    st.success(f"✅ ¡{tot_u} usuarios procesados! Se les ha enviado el correo de configuración automáticamente a los correos nuevos.")
-                    st.rerun()
-
-            st.markdown("---")
-            st.markdown("#### 🚘 2. Carga de Vehículos")
-            st.info("El Excel debe contener las columnas: **Vehiculo, Venc_VTV, Venc_Seguro**.")
-            archivo_vehiculos = st.file_uploader("Subir planilla de flota (.xlsx)", type=["xlsx"], key="up_veh")
-            
-            if archivo_vehiculos is not None:
-                df_masivo_v = pd.read_excel(archivo_vehiculos)
-                for col_fecha in ["Venc_VTV", "Venc_Seguro"]:
-                    if col_fecha in df_masivo_v.columns: df_masivo_v[col_fecha] = pd.to_datetime(df_masivo_v[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
-                st.dataframe(df_masivo_v.head())
-                
-                if st.button("🚀 Procesar Vehículos en Firebase"):
-                    barra_v = st.progress(0)
-                    tot_v = len(df_masivo_v)
-                    for i, row in df_masivo_v.iterrows():
-                        veh_str = str(row.get("Vehiculo", "")).strip()
-                        if veh_str and veh_str != "nan":
-                            db.collection("vehiculos").document(veh_str).set({
-                                "Vehiculo": veh_str, "Venc_VTV": str(row.get("Venc_VTV", "N/A")).replace("nan", "N/A"),
-                                "Venc_Seguro": str(row.get("Venc_Seguro", "N/A")).replace("nan", "N/A")
+                                pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+                                auth.create_user(email=email_str, password=pass_temporal)
+                                requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
+                            except Exception: pass 
+                            
+                            db.collection("usuarios").document(dni_str).set({
+                                "DNI_Usuario": dni_str, "Nombre": str(row.get("Nombre", "")), "Email": email_str, 
+                                "Regional": str(row.get("Regional", "")), "Rol": str(row.get("Rol", "")), "Sector": str(row.get("Sector", "")),
+                                "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
+                                "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A"),
+                                "Venc_Def_Chile": str(row.get("Venc_Def_Chile", "N/A")).replace("nan", "N/A")
                             })
-                        barra_v.progress((i + 1) / tot_v)
-                    st.success(f"✅ ¡{tot_v} vehículos cargados!")
-                    st.rerun()
+                        except Exception: pass
+                    barra_u.progress((i + 1) / tot_u)
+                st.success(f"✅ ¡{tot_u} usuarios procesados! Se les ha enviado el correo de configuración automáticamente a los correos nuevos.")
+                st.rerun()
+
+        st.markdown("---")
+        st.markdown("#### 🚘 2. Carga de Vehículos")
+        st.info("El Excel debe contener las columnas: **Vehiculo, Venc_VTV, Venc_Seguro**.")
+        archivo_vehiculos = st.file_uploader("Subir planilla de flota (.xlsx)", type=["xlsx"], key="up_veh")
+        
+        if archivo_vehiculos is not None:
+            df_masivo_v = pd.read_excel(archivo_vehiculos)
+            for col_fecha in ["Venc_VTV", "Venc_Seguro"]:
+                if col_fecha in df_masivo_v.columns: df_masivo_v[col_fecha] = pd.to_datetime(df_masivo_v[col_fecha], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
+            st.dataframe(df_masivo_v.head())
+            
+            if st.button("🚀 Procesar Vehículos en Firebase"):
+                barra_v = st.progress(0)
+                tot_v = len(df_masivo_v)
+                for i, row in df_masivo_v.iterrows():
+                    veh_str = str(row.get("Vehiculo", "")).strip()
+                    if veh_str and veh_str != "nan":
+                        db.collection("vehiculos").document(veh_str).set({
+                            "Vehiculo": veh_str, "Venc_VTV": str(row.get("Venc_VTV", "N/A")).replace("nan", "N/A"),
+                            "Venc_Seguro": str(row.get("Venc_Seguro", "N/A")).replace("nan", "N/A")
+                        })
+                    barra_v.progress((i + 1) / tot_v)
+                st.success(f"✅ ¡{tot_v} vehículos cargados!")
+                st.rerun()
