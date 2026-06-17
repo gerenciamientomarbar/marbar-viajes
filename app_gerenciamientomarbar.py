@@ -1013,65 +1013,121 @@ if st.session_state["usuario_actual"] == "ADMIN":
 
     with t3:
         st.subheader("⚡ Carga Masiva de Datos")
+        
+        # --- CARGA MASIVA DE USUARIOS ---
         st.markdown("#### 👥 1. Carga de Usuarios")
-        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Base, Rol, Sector, Venc_Licencia, Venc_Defensiva, Venc_Def_Chile**.") # <--- NUEVO
+        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Base, Rol, Sector, Venc_Licencia, Venc_Defensiva, Venc_Def_Chile**.")
         archivo_usuarios = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"], key="up_usu")
         
         if archivo_usuarios is not None:
             df_masivo_u = pd.read_excel(archivo_usuarios)
+            
+            # 1. LIMPIEZA DE COLUMNAS (Quita espacios invisibles que arruinan la lectura)
+            df_masivo_u.columns = df_masivo_u.columns.str.strip()
+            
+            # 2. FORMATO DE FECHAS
             for col_fecha in ["Venc_Licencia", "Venc_Defensiva", "Venc_Def_Chile"]:
-                if col_fecha in df_masivo_u.columns: df_masivo_u[col_fecha] = pd.to_datetime(df_masivo_u[col_fecha], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
+                if col_fecha in df_masivo_u.columns: 
+                    df_masivo_u[col_fecha] = pd.to_datetime(df_masivo_u[col_fecha], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
+                    
             st.dataframe(df_masivo_u.head())
             
             if st.button("🚀 Procesar Usuarios en Firebase"):
                 barra_u = st.progress(0)
                 tot_u = len(df_masivo_u)
+                procesados_reales = 0
+                
                 url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
+                
                 for i, row in df_masivo_u.iterrows():
-                    dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
-                    email_str = str(row.get("Email", "")).strip().lower()
-                    if dni_str and dni_str != "nan" and email_str and email_str != "nan":
+                    # Extracción segura de DNI y Email
+                    dni_bruto = row.get("DNI_Usuario", "")
+                    email_bruto = row.get("Email", "")
+                    
+                    dni_str = str(dni_bruto).replace(".0", "").strip()
+                    email_str = str(email_bruto).strip().lower()
+                    
+                    if dni_str and dni_str.lower() != "nan" and email_str and email_str.lower() != "nan":
+                        
+                        # --- TRADUCTOR INTELIGENTE DE ROLES (Soluciona el problema de las mayúsculas) ---
+                        rol_excel = str(row.get("Rol", "")).strip().upper()
+                        rol_oficial = "Conductor" # Nivel básico por defecto
+                        
+                        if "SUPERVISOR" in rol_excel or "COORDINADOR" in rol_excel or "INGENIERO" in rol_excel:
+                            rol_oficial = "Supervisor / Coordinador / Ingeniero"
+                        elif "JEFE" in rol_excel:
+                            rol_oficial = "Jefe de Servicio"
+                        elif "GERENCIA" in rol_excel:
+                            rol_oficial = "Gerencia"
+                        elif "ADMIN" in rol_excel:
+                            rol_oficial = "ADMIN"
+                        elif "CONDUCTOR" in rol_excel or "CHOFER" in rol_excel:
+                            rol_oficial = "Conductor"
+
                         try:
+                            # Intento de creación en Auth y envío de correo
                             try:
                                 pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                                 auth.create_user(email=email_str, password=pass_temporal)
                                 requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
-                            except Exception: pass 
+                            except Exception: 
+                                pass 
                             
+                            # Guardado en base de datos
                             db.collection("usuarios").document(dni_str).set({
-                                "DNI_Usuario": dni_str, "Nombre": str(row.get("Nombre", "")), "Email": email_str, 
-                                "Regional": str(row.get("Regional", "")), "Base": str(row.get("Base", "")), # <--- NUEVO
-                                "Rol": str(row.get("Rol", "")), "Sector": str(row.get("Sector", "")),
+                                "DNI_Usuario": dni_str, 
+                                "Nombre": str(row.get("Nombre", "")).strip(), 
+                                "Email": email_str, 
+                                "Regional": str(row.get("Regional", "")).strip(), 
+                                "Base": str(row.get("Base", "")).strip(), 
+                                "Rol": rol_oficial, 
+                                "Sector": str(row.get("Sector", "")).strip(),
                                 "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
                                 "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A"),
                                 "Venc_Def_Chile": str(row.get("Venc_Def_Chile", "N/A")).replace("nan", "N/A")
                             })
-                        except Exception: pass
+                            procesados_reales += 1
+                        except Exception: 
+                            pass
+                            
                     barra_u.progress((i + 1) / tot_u)
-                st.success(f"✅ ¡{tot_u} usuarios procesados! Se les ha enviado el correo de configuración automáticamente a los correos nuevos.")
+                    
+                st.success(f"✅ ¡Se leyeron {tot_u} filas y se guardaron {procesados_reales} perfiles correctamente! Revisa la pestaña 'Usuarios'.")
                 st.rerun()
 
         st.markdown("---")
+        
+        # --- CARGA MASIVA DE VEHÍCULOS ---
         st.markdown("#### 🚘 2. Carga de Vehículos")
         st.info("El Excel debe contener las columnas: **Vehiculo, Venc_VTV, Venc_Seguro**.")
         archivo_vehiculos = st.file_uploader("Subir planilla de flota (.xlsx)", type=["xlsx"], key="up_veh")
         
         if archivo_vehiculos is not None:
             df_masivo_v = pd.read_excel(archivo_vehiculos)
+            
+            df_masivo_v.columns = df_masivo_v.columns.str.strip()
+            
             for col_fecha in ["Venc_VTV", "Venc_Seguro"]:
-                if col_fecha in df_masivo_v.columns: df_masivo_v[col_fecha] = pd.to_datetime(df_masivo_v[col_fecha], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
+                if col_fecha in df_masivo_v.columns: 
+                    df_masivo_v[col_fecha] = pd.to_datetime(df_masivo_v[col_fecha], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
+                    
             st.dataframe(df_masivo_v.head())
             
             if st.button("🚀 Procesar Vehículos en Firebase"):
                 barra_v = st.progress(0)
                 tot_v = len(df_masivo_v)
+                v_procesados = 0
+                
                 for i, row in df_masivo_v.iterrows():
                     veh_str = str(row.get("Vehiculo", "")).strip()
-                    if veh_str and veh_str != "nan":
+                    if veh_str and veh_str.lower() != "nan":
                         db.collection("vehiculos").document(veh_str).set({
-                            "Vehiculo": veh_str, "Venc_VTV": str(row.get("Venc_VTV", "N/A")).replace("nan", "N/A"),
+                            "Vehiculo": veh_str, 
+                            "Venc_VTV": str(row.get("Venc_VTV", "N/A")).replace("nan", "N/A"),
                             "Venc_Seguro": str(row.get("Venc_Seguro", "N/A")).replace("nan", "N/A")
                         })
+                        v_procesados += 1
                     barra_v.progress((i + 1) / tot_v)
-                st.success(f"✅ ¡{tot_v} vehículos cargados!")
+                    
+                st.success(f"✅ ¡Se leyeron {tot_v} filas y se guardaron {v_procesados} vehículos!")
                 st.rerun()
