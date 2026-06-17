@@ -893,18 +893,37 @@ if st.session_state["usuario_actual"]:
 if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
     st.markdown("---")
     st.title("📥 Bandeja de Validaciones")
-    mi_nivel = {"Conductor": 0, "Supervisor / Coordinador / Ingeniero": 1, "Jefe de Servicio": 2, "Gerencia": 3, "ADMIN": 3}.get(st.session_state["usuario_actual"], 0)
+    
+    mapa_autoridad = {
+        "Conductor": 0, "Supervisor / Coordinador / Ingeniero": 1, 
+        "Jefe de Servicio": 2, "Gerencia": 3, "ADMIN": 3
+    }
+    mi_nivel = mapa_autoridad.get(st.session_state["usuario_actual"], 0)
+    
+    # Estandarizamos la regional del usuario actual a minúsculas para evitar errores de tipeo
+    mi_regional = st.session_state.get("regional_empleado", "").strip().lower()
     
     try:
         solicitudes_pendientes = db.collection(COLECCION_VIAJES).where("Aprobacion", "==", "🔴 Pendiente").stream()
         p_list = []
-        for doc in solicitudes_pendientes: p_list.append(doc.to_dict())
+        
+        for doc in solicitudes_pendientes: 
+            viaje_data = doc.to_dict()
+            viaje_regional = viaje_data.get("Regional", "").strip().lower()
+            
+            # --- FILTRO REGIONAL ESTRICTO ---
+            # El ADMIN ve todo. Los demás solo ven los viajes de su propia regional.
+            if st.session_state["usuario_actual"] == "ADMIN" or viaje_regional == mi_regional:
+                p_list.append(viaje_data)
             
         if p_list:
             for v_p in p_list:
                 nivel_viaje = v_p.get("Nivel", 1)
-                with st.expander(f"🚨 ID: {v_p['ID']} | Conductor: {v_p['Conductor']} | Riesgo Nivel {nivel_viaje}"):
+                
+                # Agregamos la Regional a la tarjeta visual para mayor claridad
+                with st.expander(f"🚨 ID: {v_p['ID']} | Conductor: {v_p['Conductor']} | Base: {v_p.get('Regional', 'N/A')} | Riesgo Nivel {nivel_viaje}"):
                     st.write(f"**Ruta:** {v_p['Origen']} -> {v_p['Destino']} ({v_p['Puntaje']} pts)")
+                    
                     if mi_nivel >= nivel_viaje:
                         if st.button(f"✍️ Aprobar {v_p['ID']}", key=f"btn_ap_{v_p['ID']}"):
                             db.collection(COLECCION_VIAJES).document(str(v_p['ID'])).update({
@@ -912,9 +931,13 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / I
                                 "Fecha_Aprobacion": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S"), "Estado_Viaje": "En viaje"
                             })
                             st.rerun()
-                    else: st.error(f"🔒 Usted es {st.session_state['usuario_actual']} (Nivel {mi_nivel}). Este gerenciamiento exige firma de Nivel {nivel_viaje}.")
-        else: st.info("✅ Bandeja limpia.")
-    except Exception as e_bandeja: pass
+                    else: 
+                        st.error(f"🔒 Usted es {st.session_state['usuario_actual']} (Nivel {mi_nivel}). Este gerenciamiento exige firma de Nivel {nivel_viaje}.")
+        else: 
+            st.info("✅ Bandeja limpia para su Regional.")
+            
+    except Exception as e_bandeja: 
+        pass
 
 # --- 8. ADMIN ---
 if st.session_state["usuario_actual"] == "ADMIN":
