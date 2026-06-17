@@ -302,6 +302,7 @@ if st.session_state["usuario_actual"] is None:
                             "nombre_empleado": usuario_encontrado.get("Nombre", "Empleado MARBAR"), 
                             "sector_empleado": usuario_encontrado.get("Sector", "Sin Sector"), 
                             "regional_empleado": usuario_encontrado.get("Regional", "No asignada"),
+                            "base_empleado": usuario_encontrado.get("Base", "No asignada"), # <--- NUEVO
                             "venc_licencia": usuario_encontrado.get("Venc_Licencia", "N/A"),
                             "venc_defensiva": usuario_encontrado.get("Venc_Defensiva", "N/A"),
                             "venc_def_chile": usuario_encontrado.get("Venc_Def_Chile", "N/A"),
@@ -316,6 +317,7 @@ if st.session_state["usuario_actual"] is None:
                             "nombre_empleado": "Administrador", 
                             "sector_empleado": "Gerencia", 
                             "regional_empleado": "Sede Central",
+                            "base_empleado": "Sede Central", # <--- NUEVO
                             "venc_licencia": "N/A",
                             "venc_defensiva": "N/A",
                             "venc_def_chile": "N/A",
@@ -581,6 +583,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     rol_usuario = st.session_state["usuario_actual"]
     nombre_conductor = st.session_state["nombre_empleado"]
     regional_usuario = st.session_state.get("regional_empleado", "No asignada")
+    base_usuario = st.session_state.get("base_empleado", "No asignada") # <--- NUEVO
     
     mapa_autoridad = {
         "Conductor": 0, "Supervisor / Coordinador / Ingeniero": 1, 
@@ -589,7 +592,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     nivel_aprobacion_usuario = mapa_autoridad.get(rol_usuario, 0)
     
     st.markdown("### 1. Datos Generales")
-    st.info(f"👤 **Conductor:** {nombre_conductor} | **Regional:** {regional_usuario} | **Sector:** {sector_usuario}")
+    st.info(f"👤 **Conductor:** {nombre_conductor} | **Regional:** {regional_usuario} | **Base:** {base_usuario} | **Sector:** {sector_usuario}") # <--- ACTUALIZADO
 
     df_flota = obtener_vehiculos()
     if not df_flota.empty: opciones_flota = df_flota["Vehiculo"].tolist()
@@ -749,7 +752,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                     aprobacion_db, aprobador_db, fecha_aprobacion_db, estado_viaje_db = "🟢 Aprobado", nombre_conductor, hora_str, "En viaje"
                 
                 datos = {
-                    "ID": nuevo_id, "Regional": regional_usuario, "Fecha": hora_str, 
+                    "ID": nuevo_id, "Regional": regional_usuario, "Base": base_usuario, "Fecha": hora_str, # <--- NUEVO
                     "Conductor": nombre_conductor, "Sector": sector_usuario, "Cargo": rol_usuario, 
                     "Vehiculo": vehiculo_sel, "Duracion": duracion_final_txt, "Salida": salida_tipo, 
                     "Alarma Nocturna": alarma_noche, "Origen": origen_txt, "Destino": destino_txt, 
@@ -950,7 +953,9 @@ if st.session_state["usuario_actual"] == "ADMIN":
         adm_email = st.text_input("Correo Electrónico Oficial:").strip().lower()
         adm_nombre = st.text_input("Nombre y Apellido Real:").strip()
         adm_dni = st.text_input("DNI:").strip()
-        adm_regional = st.text_input("Regional a la que pertenece (Ej: Neuquén, Río Negro):").strip()
+        col_reg_base = st.columns(2)
+        with col_reg_base[0]: adm_regional = st.text_input("Regional (Ej: Neuquén, Chile):").strip()
+        with col_reg_base[1]: adm_base = st.text_input("Base Operativa (Ej: Base Cipolletti):").strip() # <--- NUEVO
         adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia", "Completacion"])
         adm_rol = st.selectbox("Rol:", ["Conductor", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "ADMIN"])
         
@@ -960,7 +965,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
         with col_v3: adm_venc_def_chile = st.date_input("Venc. Defensiva Chile:", value=datetime.now(TZ_AR).date(), format="DD/MM/YYYY")
         
         if st.button("💾 Asignar Perfil Operativo"):
-            if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "":
+            if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "" and adm_base != "": # <--- NUEVO
                 try:
                     try:
                         pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
@@ -970,7 +975,8 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     except Exception: pass
                     
                     db.collection("usuarios").document(adm_dni).set({
-                        "DNI_Usuario": adm_dni, "Nombre": adm_nombre, "Email": adm_email, "Regional": adm_regional,
+                        "DNI_Usuario": adm_dni, "Nombre": adm_nombre, "Email": adm_email, 
+                        "Regional": adm_regional, "Base": adm_base, # <--- NUEVO
                         "Rol": adm_rol, "Sector": adm_sector, 
                         "Venc_Licencia": adm_venc_lic.strftime("%d/%m/%Y"),
                         "Venc_Defensiva": adm_venc_def.strftime("%d/%m/%Y"),
@@ -979,19 +985,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     st.success(f"✅ ¡Perfil asignado con éxito! Se ha enviado un correo a {adm_email} para configurar la clave.")
                     st.rerun()
                 except Exception as e: st.error(f"Error de Firebase: {e}")
-            else: st.error("Complete todos los campos de texto, incluyendo la Regional.")
-                
-        df_u = obtener_usuarios()
-        if not df_u.empty:
-            st.dataframe(df_u, hide_index=True)
-            lista_borrar_u = [""]
-            for index, row in df_u.iterrows():
-                if row.get("Rol") != "ADMIN" and row.get("Email") != "admin@marbar.com": lista_borrar_u.append(row["DNI_Usuario"])
-            elim_u = st.selectbox("Borrar Perfil Operativo (DNI):", lista_borrar_u)
-            if st.button("❌ Dar de Baja"): 
-                if elim_u.strip() != "": 
-                    db.collection("usuarios").document(elim_u.strip()).delete()
-                    st.rerun()
+            else: st.error("Complete todos los campos de texto, incluyendo la Regional y la Base.")
 
     with t2:
         st.info("💡 Agregue las unidades de la flota y su documentación. El sistema bloqueará automáticamente los viajes si la VTV o el Seguro están vencidos.")
@@ -1020,7 +1014,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
     with t3:
         st.subheader("⚡ Carga Masiva de Datos")
         st.markdown("#### 👥 1. Carga de Usuarios")
-        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva, Venc_Def_Chile**.")
+        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Base, Rol, Sector, Venc_Licencia, Venc_Defensiva, Venc_Def_Chile**.") # <--- NUEVO
         archivo_usuarios = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"], key="up_usu")
         
         if archivo_usuarios is not None:
@@ -1046,7 +1040,8 @@ if st.session_state["usuario_actual"] == "ADMIN":
                             
                             db.collection("usuarios").document(dni_str).set({
                                 "DNI_Usuario": dni_str, "Nombre": str(row.get("Nombre", "")), "Email": email_str, 
-                                "Regional": str(row.get("Regional", "")), "Rol": str(row.get("Rol", "")), "Sector": str(row.get("Sector", "")),
+                                "Regional": str(row.get("Regional", "")), "Base": str(row.get("Base", "")), # <--- NUEVO
+                                "Rol": str(row.get("Rol", "")), "Sector": str(row.get("Sector", "")),
                                 "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
                                 "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A"),
                                 "Venc_Def_Chile": str(row.get("Venc_Def_Chile", "N/A")).replace("nan", "N/A")
