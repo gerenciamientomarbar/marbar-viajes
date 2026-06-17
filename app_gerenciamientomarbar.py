@@ -206,7 +206,7 @@ def generar_ficha_html(v_data):
 
         <h2>1. PERSONAL Y UNIDAD</h2>
         <table class="tbl">
-            <tr><th>Conductor</th><td>{v_data.get('Chofer')}</td><th>Unidad</th><td>{v_data.get('Vehiculo')}</td></tr>
+            <tr><th>Conductor</th><td>{v_data.get('Conductor')}</td><th>Unidad</th><td>{v_data.get('Vehiculo')}</td></tr>
             <tr><th>Sector/Cargo</th><td>{v_data.get('Sector')} / {v_data.get('Cargo')}</td><th>Regional</th><td>{v_data.get('Regional')}</td></tr>
             <tr><th>Fecha Confección</th><td colspan="3">{v_data.get('Fecha')}</td></tr>
         </table>
@@ -304,18 +304,18 @@ if st.session_state["usuario_actual"] is None:
                     
                     if usuario_encontrado:
                         st.session_state.update({
-                            "usuario_actual": usuario_encontrado.get("Rol", "Chofer"), 
+                            "usuario_actual": usuario_encontrado.get("Rol", "Conductor"), 
                             "nombre_empleado": usuario_encontrado.get("Nombre", "Empleado MARBAR"), 
                             "sector_empleado": usuario_encontrado.get("Sector", "Sin Sector"), 
                             "regional_empleado": usuario_encontrado.get("Regional", "No asignada"),
                             "venc_licencia": usuario_encontrado.get("Venc_Licencia", "N/A"),
                             "venc_defensiva": usuario_encontrado.get("Venc_Defensiva", "N/A"),
-                            "venc_def_chile": usuario_encontrado.get("Venc_Def_Chile", "N/A"), # <--- NUEVO
+                            "venc_def_chile": usuario_encontrado.get("Venc_Def_Chile", "N/A"),
                             "email_empleado": correo_login,
                             "paso_actual": "Menu"
                         })
                         st.rerun()
-                    
+                        
                     elif correo_login == "admin@marbar.com":
                         st.session_state.update({
                             "usuario_actual": "ADMIN", 
@@ -324,7 +324,7 @@ if st.session_state["usuario_actual"] is None:
                             "regional_empleado": "Sede Central",
                             "venc_licencia": "N/A",
                             "venc_defensiva": "N/A",
-                            "venc_def_chile": "N/A", # <--- NUEVO
+                            "venc_def_chile": "N/A",
                             "email_empleado": correo_login,
                             "paso_actual": "Menu"
                         })
@@ -348,7 +348,7 @@ if st.session_state["usuario_actual"] is None:
                 else:
                     st.error("⛔ El correo no se encuentra registrado en el sistema. Verifique con el Administrador.")
             else:
-                st.error("Por favor, escriba un correo electrónico válido.")
+                st.error("Por favor, escribe un correo electrónico válido.")
     
     st.stop() 
 
@@ -366,10 +366,8 @@ if st.session_state["paso_actual"] == "Menu":
         reg_emp = st.session_state.get("regional_empleado", "N/A").strip().lower()
         hoy_dt = datetime.now(TZ_AR).date()
         
-        # Lista base de documentos a auditar
         docs_a_revisar = [("Carnet de Manejo", v_lic), ("Curso de Conducción Defensiva", v_def)]
         
-        # Si el usuario es de la regional Chile, sumamos el carnet internacional a la auditoría
         if reg_emp == "chile":
             docs_a_revisar.append(("Manejo Defensivo (Chile)", v_def_chile))
             
@@ -415,7 +413,7 @@ if st.session_state["paso_actual"] == "Menu":
         st.markdown("---")
     
     if st.session_state["usuario_actual"] != "ADMIN":
-        viajes_activos = db.collection(COLECCION_VIAJES).where("Chofer", "==", st.session_state["nombre_empleado"]).where("Estado_Viaje", "in", ["En viaje", "En espera"]).stream()
+        viajes_activos = db.collection(COLECCION_VIAJES).where("Conductor", "==", st.session_state["nombre_empleado"]).where("Estado_Viaje", "in", ["En viaje", "En espera"]).stream()
         lista_activos = []
         for d in viajes_activos:
             lista_activos.append(d.to_dict())
@@ -479,7 +477,7 @@ if st.session_state["paso_actual"] == "Menu":
             if documentacion_vencida:
                 st.error("⛔ **ACCESO DENEGADO:** Tiene documentación habilitante (Nacional o Internacional) vencida. Por normativas de seguridad, el sistema bloqueó la creación de nuevos viajes.")
             else:
-                st.session_state["paso_actual"] = "Test_Chofer"
+                st.session_state["paso_actual"] = "Test_Conductor"
                 st.rerun()
             
     with col_menu2:
@@ -488,7 +486,7 @@ if st.session_state["paso_actual"] == "Menu":
             st.rerun()
 
 # 2. TEST DE FATIGA
-elif st.session_state["paso_actual"] == "Test_Chofer":
+elif st.session_state["paso_actual"] == "Test_Conductor":
     st.warning("⚖️ **DECLARACIÓN JURADA:** La información ingresada en este gerenciamiento reviste carácter de Declaración Jurada. Cualquier omisión o falsedad sobre su estado o el del vehículo constituye una falta grave a las normativas de seguridad (SSA).")
     st.subheader("🛡️ Paso 1: Control de Fatiga")
     
@@ -507,7 +505,7 @@ elif st.session_state["paso_actual"] == "Test_Chofer":
             if t1 is None or t2 is None or t3 is None: 
                 st.error("⛔ Responda todas las preguntas.")
             elif t1 == "Sí" and t2 == "No" and t3 == "No":
-                st.session_state["test_chofer"] = "Aprobado"
+                st.session_state["test_conductor"] = "Aprobado"
                 st.session_state["paso_actual"] = "Inspeccion_Vehiculo"
                 st.rerun()
             else: 
@@ -550,7 +548,7 @@ elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
         "2. Cédula Verde/Azul",
         "3. RTO Libre de observaciones",
         "4. Seguro del Vehículo",
-        "5. Curso conducción Defensiva Chofer"
+        "5. Curso conducción Defensiva Conductor"
     ]
     respuestas_doc = {}
     for item in doc_items:
@@ -559,7 +557,7 @@ elif st.session_state["paso_actual"] == "Inspeccion_Vehiculo":
     col1, col2 = st.columns(2)
     with col1:
         if st.button("⬅️ Regresar"): 
-            st.session_state["paso_actual"] = "Test_Chofer"
+            st.session_state["paso_actual"] = "Test_Conductor"
             st.rerun()
             
     with col2:
@@ -587,23 +585,21 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     
     sector_usuario = st.session_state["sector_empleado"]
     rol_usuario = st.session_state["usuario_actual"]
-    nombre_chofer = st.session_state["nombre_empleado"]
+    nombre_conductor = st.session_state["nombre_empleado"]
     regional_usuario = st.session_state.get("regional_empleado", "No asignada")
     
     mapa_autoridad = {
-        "Chofer": 0, "Supervisor / Coordinador / Ingeniero": 1, 
+        "Conductor": 0, "Supervisor / Coordinador / Ingeniero": 1, 
         "Jefe de Servicio": 2, "Gerencia": 3, "ADMIN": 3
     }
     nivel_aprobacion_usuario = mapa_autoridad.get(rol_usuario, 0)
     
     st.markdown("### 1. Datos Generales")
-    st.info(f"👤 **Conductor:** {nombre_chofer} | **Regional:** {regional_usuario} | **Sector:** {sector_usuario}")
+    st.info(f"👤 **Conductor:** {nombre_conductor} | **Regional:** {regional_usuario} | **Sector:** {sector_usuario}")
 
     df_flota = obtener_vehiculos()
-    if not df_flota.empty:
-        opciones_flota = df_flota["Vehiculo"].tolist()
-    else:
-        opciones_flota = ["⚠️ Cargar flota en Admin"]
+    if not df_flota.empty: opciones_flota = df_flota["Vehiculo"].tolist()
+    else: opciones_flota = ["⚠️ Cargar flota en Admin"]
         
     vehiculo_sel = st.selectbox("Unidad:", opciones_flota)
 
@@ -623,25 +619,20 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                         vehiculo_inhabilitado = True
                         st.error(f"🚨 **UNIDAD INHABILITADA:** El vehículo seleccionado tiene el **{doc_name}** vencido desde el {doc_date}. Por normativas de seguridad, no puede iniciar la marcha con este equipo.")
                         break
-                except Exception:
-                    pass
+                except Exception: pass
 
     with st.expander("\U0001F5FA CONSULTA MAPA DE YACIMIENTOS", expanded=True):
         components.iframe("https://www.google.com/maps/d/u/2/embed?mid=1BPDw99m6vQAC09Kdbw9Onaj5mu-blw4&ehbc=2E312F", height=480)
 
     col1, col2 = st.columns(2)
-    with col1: 
-        origen_txt = st.text_input("Origen:")
-    with col2: 
-        destino_txt = st.text_input("Destino:")
+    with col1: origen_txt = st.text_input("Origen:")
+    with col2: destino_txt = st.text_input("Destino:")
         
     st.write("Duración Estimada del Trayecto:")
     col_dur_h, col_dur_m = st.columns(2)
     
-    with col_dur_h:
-        dur_horas = st.number_input("Horas (HH):", min_value=0, max_value=72, value=None, step=1)
-    with col_dur_m:
-        dur_minutos = st.number_input("Minutos (MM):", min_value=0, max_value=59, value=None, step=1)
+    with col_dur_h: dur_horas = st.number_input("Horas (HH):", min_value=0, max_value=72, value=None, step=1)
+    with col_dur_m: dur_minutos = st.number_input("Minutos (MM):", min_value=0, max_value=59, value=None, step=1)
     
     salida_tipo = st.radio("Salida:", ["Planificada", "Urgencia"], index=None)
 
@@ -666,8 +657,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     
     v_pasajeros = st.radio("Acompañantes:", ["Con pasajeros", "Solo conductor"], index=None)
     pasajeros_detalle = "N/A"
-    if v_pasajeros == "Con pasajeros":
-        pasajeros_detalle = st.text_input("👥 Nombres:")
+    if v_pasajeros == "Con pasajeros": pasajeros_detalle = st.text_input("👥 Nombres:")
         
     if v_pasajeros: 
         if v_pasajeros == "Con pasajeros": puntos_totales += 1 
@@ -711,13 +701,10 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
 
     # Evaluación y Auto-Aprobación
     nivel_riesgo_calculado = 1
-    if puntos_totales > 15 and puntos_totales <= 30:
-        nivel_riesgo_calculado = 2
-    elif puntos_totales > 30:
-        nivel_riesgo_calculado = 3
+    if puntos_totales > 15 and puntos_totales <= 30: nivel_riesgo_calculado = 2
+    elif puntos_totales > 30: nivel_riesgo_calculado = 3
         
-    if salida_tipo == "Urgencia" and v_horario == "Nocturno":
-        nivel_riesgo_calculado = 3
+    if salida_tipo == "Urgencia" and v_horario == "Nocturno": nivel_riesgo_calculado = 3
     
     if nivel_aprobacion_usuario >= nivel_riesgo_calculado:
         color_semaforo = "green"
@@ -765,17 +752,17 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                 aprobacion_db, aprobador_db, fecha_aprobacion_db, estado_viaje_db = "🔴 Pendiente", "Pendiente", "Pendiente", "En espera"
                 
                 if color_semaforo == "green":
-                    aprobacion_db, aprobador_db, fecha_aprobacion_db, estado_viaje_db = "🟢 Aprobado", nombre_chofer, hora_str, "En viaje"
+                    aprobacion_db, aprobador_db, fecha_aprobacion_db, estado_viaje_db = "🟢 Aprobado", nombre_conductor, hora_str, "En viaje"
                 
                 datos = {
                     "ID": nuevo_id, "Regional": regional_usuario, "Fecha": hora_str, 
-                    "Chofer": nombre_chofer, "Sector": sector_usuario, "Cargo": rol_usuario, 
+                    "Conductor": nombre_conductor, "Sector": sector_usuario, "Cargo": rol_usuario, 
                     "Vehiculo": vehiculo_sel, "Duracion": duracion_final_txt, "Salida": salida_tipo, 
                     "Alarma Nocturna": alarma_noche, "Origen": origen_txt, "Destino": destino_txt, 
                     "Estado": aprobacion_estado, "Puntaje": puntos_totales, "Nivel": nivel_riesgo_calculado, 
                     "Aprobacion": aprobacion_db, "Aprobador": aprobador_db, "Fecha_Aprobacion": fecha_aprobacion_db, 
                     "Estado_Viaje": estado_viaje_db, "Fecha_Fin": "En curso", 
-                    "Test_Chofer": st.session_state.get("test_chofer"), 
+                    "Test_Conductor": st.session_state.get("test_conductor"), 
                     "Inspeccion_Vehiculo": st.session_state.get("inspeccion_vehiculo"), 
                     "Checklist_Eq": st.session_state.get("resp_eq", {}), 
                     "Checklist_Doc": st.session_state.get("resp_doc", {}), 
@@ -788,7 +775,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                     st.balloons()
                     cabecera_wa = f"🟢 *VIAJE AUTO-APROBADO ID {nuevo_id}*" if color_semaforo == "green" else f"🔴 *NUEVA SOLICITUD ID {nuevo_id}*"
                     pie_wa = f"👉 *Aprobado automáticamente por sistema.*" if color_semaforo == "green" else f"👉 *Por favor, apruebe en la plataforma MARBAR.*"
-                    tkt = f"{cabecera_wa}\n\n🔹 *Chofer:* {nombre_chofer}\n🔹 *Vehículo:* {vehiculo_sel}\n🔹 *Origen:* {origen_txt}\n🔹 *Destino:* {destino_txt}\n🔹 *Duración:* {duracion_final_txt}\n🔹 *Riesgo:* Nivel {nivel_riesgo_calculado}\n\n{pie_wa}"
+                    tkt = f"{cabecera_wa}\n\n🔹 *Conductor:* {nombre_conductor}\n🔹 *Vehículo:* {vehiculo_sel}\n🔹 *Origen:* {origen_txt}\n🔹 *Destino:* {destino_txt}\n🔹 *Duración:* {duracion_final_txt}\n🔹 *Riesgo:* Nivel {nivel_riesgo_calculado}\n\n{pie_wa}"
                     
                     st.markdown(f"### [📱 ENVIAR TICKET](https://wa.me/?text={urllib.parse.quote(tkt)})")
                     st.success("Guardado Exitoso.")
@@ -803,7 +790,7 @@ elif st.session_state["paso_actual"] == "Historial":
         
     df_h = pd.DataFrame(lista_historica)
     if not df_h.empty:
-        if st.session_state["usuario_actual"] != "ADMIN": df_h = df_h[df_h["Chofer"] == st.session_state["nombre_empleado"]]
+        if st.session_state["usuario_actual"] != "ADMIN": df_h = df_h[df_h["Conductor"] == st.session_state["nombre_empleado"]]
         if not df_h.empty:
             df_h = df_h.sort_values(by="ID", ascending=False)
             st.dataframe(df_h[['ID', 'Fecha', 'Origen', 'Destino', 'Estado_Viaje']], hide_index=True, use_container_width=True)
@@ -811,7 +798,7 @@ elif st.session_state["paso_actual"] == "Historial":
             st.write("#### 📥 Extraer Ficha Auditada (PDF/HTML)")
             
             op_dd = [""]
-            for _, r in df_h.iterrows(): op_dd.append(f"{r['ID']} - {r.get('Chofer','')} - {r.get('Fecha','')[:10]}")
+            for _, r in df_h.iterrows(): op_dd.append(f"{r['ID']} - {r.get('Conductor','')} - {r.get('Fecha','')[:10]}")
             v_sel = st.selectbox("Seleccione viaje:", op_dd)
             
             if v_sel != "":
@@ -862,13 +849,13 @@ if st.session_state["usuario_actual"]:
             with st.sidebar:
                 st.markdown("---")
                 st.write("⚠️ **Pendientes (Hoy):**")
-            if not df_p.empty: st.sidebar.dataframe(df_p[['Chofer', 'Destino']], hide_index=True)
+            if not df_p.empty: st.sidebar.dataframe(df_p[['Conductor', 'Destino']], hide_index=True)
             else: st.sidebar.write("✅ Al día.")
                 
             with st.sidebar:
                 st.markdown("---")
                 st.write("🚚 **En Ruta:**")
-            if not df_r.empty: st.sidebar.dataframe(df_r[['Chofer', 'Destino']], hide_index=True)
+            if not df_r.empty: st.sidebar.dataframe(df_r[['Conductor', 'Destino']], hide_index=True)
             else: st.sidebar.write("✅ Ninguna.")
 
             with st.sidebar:
@@ -876,7 +863,7 @@ if st.session_state["usuario_actual"]:
                 st.subheader("📜 Ficha Rápida")
             df_sb_ord = df_sb.sort_values(by="ID", ascending=False)
             op_sb = [""]
-            for _, r in df_sb_ord.iterrows(): op_sb.append(f"{r['ID']} - {r.get('Chofer','')}")
+            for _, r in df_sb_ord.iterrows(): op_sb.append(f"{r['ID']} - {r.get('Conductor','')}")
             with st.sidebar: v_sb = st.selectbox("Buscar ID:", op_sb, key="sb_aud")
             
             if v_sb != "":
@@ -889,7 +876,7 @@ if st.session_state["usuario_actual"]:
                 with st.sidebar:
                     st.markdown("---")
                     st.subheader("📊 Consola Excel")
-                cols = ['ID', 'Regional', 'Fecha', 'Chofer', 'Sector', 'Cargo', 'Vehiculo', 'Duracion', 'Salida', 'Alarma Nocturna', 'Origen', 'Destino', 'Estado', 'Puntaje', 'Nivel', 'Aprobacion', 'Aprobador', 'Fecha_Aprobacion', 'Estado_Viaje', 'Fecha_Fin']
+                cols = ['ID', 'Regional', 'Fecha', 'Conductor', 'Sector', 'Cargo', 'Vehiculo', 'Duracion', 'Salida', 'Alarma Nocturna', 'Origen', 'Destino', 'Estado', 'Puntaje', 'Nivel', 'Aprobacion', 'Aprobador', 'Fecha_Aprobacion', 'Estado_Viaje', 'Fecha_Fin']
                 for c in cols: 
                     if c not in df_sb.columns: df_sb[c] = "N/A"
                 df_ex = df_sb[cols].sort_values(by="ID", ascending=False).copy()
@@ -912,7 +899,7 @@ if st.session_state["usuario_actual"]:
 if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
     st.markdown("---")
     st.title("📥 Bandeja de Validaciones")
-    mi_nivel = {"Chofer": 0, "Supervisor / Coordinador / Ingeniero": 1, "Jefe de Servicio": 2, "Gerencia": 3, "ADMIN": 3}.get(st.session_state["usuario_actual"], 0)
+    mi_nivel = {"Conductor": 0, "Supervisor / Coordinador / Ingeniero": 1, "Jefe de Servicio": 2, "Gerencia": 3, "ADMIN": 3}.get(st.session_state["usuario_actual"], 0)
     
     try:
         solicitudes_pendientes = db.collection(COLECCION_VIAJES).where("Aprobacion", "==", "🔴 Pendiente").stream()
@@ -922,7 +909,7 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / I
         if p_list:
             for v_p in p_list:
                 nivel_viaje = v_p.get("Nivel", 1)
-                with st.expander(f"🚨 ID: {v_p['ID']} | Conductor: {v_p['Chofer']} | Riesgo Nivel {nivel_viaje}"):
+                with st.expander(f"🚨 ID: {v_p['ID']} | Conductor: {v_p['Conductor']} | Riesgo Nivel {nivel_viaje}"):
                     st.write(f"**Ruta:** {v_p['Origen']} -> {v_p['Destino']} ({v_p['Puntaje']} pts)")
                     if mi_nivel >= nivel_viaje:
                         if st.button(f"✍️ Aprobar {v_p['ID']}", key=f"btn_ap_{v_p['ID']}"):
@@ -948,7 +935,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
         adm_dni = st.text_input("DNI:").strip()
         adm_regional = st.text_input("Regional a la que pertenece (Ej: Neuquén, Río Negro):").strip()
         adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia", "Completacion"])
-        adm_rol = st.selectbox("Rol:", ["Chofer", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "ADMIN"])
+        adm_rol = st.selectbox("Rol:", ["Conductor", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "ADMIN"])
         
         col_v1, col_v2, col_v3 = st.columns(3)
         with col_v1: adm_venc_lic = st.date_input("Venc. Carnet Manejo:", value=datetime.now(TZ_AR).date())
@@ -970,7 +957,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
                         "Rol": adm_rol, "Sector": adm_sector, 
                         "Venc_Licencia": adm_venc_lic.strftime("%d/%m/%Y"),
                         "Venc_Defensiva": adm_venc_def.strftime("%d/%m/%Y"),
-                        "Venc_Def_Chile": adm_venc_def_chile.strftime("%d/%m/%Y") # <--- NUEVO
+                        "Venc_Def_Chile": adm_venc_def_chile.strftime("%d/%m/%Y")
                     })
                     st.success(f"✅ ¡Perfil asignado con éxito! Se ha enviado un correo a {adm_email} para configurar la clave.")
                     st.rerun()
@@ -989,90 +976,90 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     db.collection("usuarios").document(elim_u.strip()).delete()
                     st.rerun()
 
-    with t2:
-        st.info("💡 Agregue las unidades de la flota y su documentación. El sistema bloqueará automáticamente los viajes si la VTV o el Seguro están vencidos.")
-        adm_pat = st.text_input("Patente / Interno:").strip()
-        col_vtv, col_seg = st.columns(2)
-        with col_vtv: adm_venc_vtv = st.date_input("Vencimiento VTV:", value=datetime.now(TZ_AR).date())
-        with col_seg: adm_venc_seguro = st.date_input("Vencimiento Seguro:", value=datetime.now(TZ_AR).date())
-        
-        if st.button("💾 Agregar Equipo"):
-            if adm_pat != "": 
-                db.collection("vehiculos").document(adm_pat).set({"Vehiculo": adm_pat, "Venc_VTV": adm_venc_vtv.strftime("%d/%m/%Y"), "Venc_Seguro": adm_venc_seguro.strftime("%d/%m/%Y")})
-                st.success(f"Unidad {adm_pat} guardada correctamente.")
-                st.rerun()
+        with t2:
+            st.info("💡 Agregue las unidades de la flota y su documentación. El sistema bloqueará automáticamente los viajes si la VTV o el Seguro están vencidos.")
+            adm_pat = st.text_input("Patente / Interno:").strip()
+            col_vtv, col_seg = st.columns(2)
+            with col_vtv: adm_venc_vtv = st.date_input("Vencimiento VTV:", value=datetime.now(TZ_AR).date())
+            with col_seg: adm_venc_seguro = st.date_input("Vencimiento Seguro:", value=datetime.now(TZ_AR).date())
+            
+            if st.button("💾 Agregar Equipo"):
+                if adm_pat != "": 
+                    db.collection("vehiculos").document(adm_pat).set({"Vehiculo": adm_pat, "Venc_VTV": adm_venc_vtv.strftime("%d/%m/%Y"), "Venc_Seguro": adm_venc_seguro.strftime("%d/%m/%Y")})
+                    st.success(f"Unidad {adm_pat} guardada correctamente.")
+                    st.rerun()
+                    
+            df_v = obtener_vehiculos()
+            if not df_v.empty:
+                st.dataframe(df_v, hide_index=True)
+                lista_borrar_v = [""]
+                for vh in df_v["Vehiculo"].tolist(): lista_borrar_v.append(vh)
+                elim_v = st.selectbox("Borrar Equipo:", lista_borrar_v)
+                if st.button("❌ Retirar Unidad"): 
+                    if elim_v.strip() != "": 
+                        db.collection("vehiculos").document(elim_v.strip()).delete()
+                        st.rerun()
+
+        with t3:
+            st.subheader("⚡ Carga Masiva de Datos")
+            st.markdown("#### 👥 1. Carga de Usuarios")
+            st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva, Venc_Def_Chile**.")
+            archivo_usuarios = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"], key="up_usu")
+            
+            if archivo_usuarios is not None:
+                df_masivo_u = pd.read_excel(archivo_usuarios)
+                for col_fecha in ["Venc_Licencia", "Venc_Defensiva", "Venc_Def_Chile"]:
+                    if col_fecha in df_masivo_u.columns: df_masivo_u[col_fecha] = pd.to_datetime(df_masivo_u[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
+                st.dataframe(df_masivo_u.head())
                 
-        df_v = obtener_vehiculos()
-        if not df_v.empty:
-            st.dataframe(df_v, hide_index=True)
-            lista_borrar_v = [""]
-            for vh in df_v["Vehiculo"].tolist(): lista_borrar_v.append(vh)
-            elim_v = st.selectbox("Borrar Equipo:", lista_borrar_v)
-            if st.button("❌ Retirar Unidad"): 
-                if elim_v.strip() != "": 
-                    db.collection("vehiculos").document(elim_v.strip()).delete()
+                if st.button("🚀 Procesar Usuarios en Firebase"):
+                    barra_u = st.progress(0)
+                    tot_u = len(df_masivo_u)
+                    url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
+                    for i, row in df_masivo_u.iterrows():
+                        dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
+                        email_str = str(row.get("Email", "")).strip().lower()
+                        if dni_str and dni_str != "nan" and email_str and email_str != "nan":
+                            try:
+                                try:
+                                    pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+                                    auth.create_user(email=email_str, password=pass_temporal)
+                                    requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
+                                except Exception: pass 
+                                
+                                db.collection("usuarios").document(dni_str).set({
+                                    "DNI_Usuario": dni_str, "Nombre": str(row.get("Nombre", "")), "Email": email_str, 
+                                    "Regional": str(row.get("Regional", "")), "Rol": str(row.get("Rol", "")), "Sector": str(row.get("Sector", "")),
+                                    "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
+                                    "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A"),
+                                    "Venc_Def_Chile": str(row.get("Venc_Def_Chile", "N/A")).replace("nan", "N/A")
+                                })
+                            except Exception: pass
+                        barra_u.progress((i + 1) / tot_u)
+                    st.success(f"✅ ¡{tot_u} usuarios procesados! Se les ha enviado el correo de configuración automáticamente a los correos nuevos.")
                     st.rerun()
 
-    with t3:
-        st.subheader("⚡ Carga Masiva de Datos")
-        st.markdown("#### 👥 1. Carga de Usuarios")
-        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Rol, Sector, Venc_Licencia, Venc_Defensiva, Venc_Def_Chile**.")
-        archivo_usuarios = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"], key="up_usu")
-        
-        if archivo_usuarios is not None:
-            df_masivo_u = pd.read_excel(archivo_usuarios)
-            for col_fecha in ["Venc_Licencia", "Venc_Defensiva", "Venc_Def_Chile"]: # <--- ACTUALIZADO
-                if col_fecha in df_masivo_u.columns: df_masivo_u[col_fecha] = pd.to_datetime(df_masivo_u[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
-            st.dataframe(df_masivo_u.head())
+            st.markdown("---")
+            st.markdown("#### 🚘 2. Carga de Vehículos")
+            st.info("El Excel debe contener las columnas: **Vehiculo, Venc_VTV, Venc_Seguro**.")
+            archivo_vehiculos = st.file_uploader("Subir planilla de flota (.xlsx)", type=["xlsx"], key="up_veh")
             
-            if st.button("🚀 Procesar Usuarios en Firebase"):
-                barra_u = st.progress(0)
-                tot_u = len(df_masivo_u)
-                url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
-                for i, row in df_masivo_u.iterrows():
-                    dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
-                    email_str = str(row.get("Email", "")).strip().lower()
-                    if dni_str and dni_str != "nan" and email_str and email_str != "nan":
-                        try:
-                            try:
-                                pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-                                auth.create_user(email=email_str, password=pass_temporal)
-                                requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
-                            except Exception: pass 
-                            
-                            db.collection("usuarios").document(dni_str).set({
-                                "DNI_Usuario": dni_str, "Nombre": str(row.get("Nombre", "")), "Email": email_str, 
-                                "Regional": str(row.get("Regional", "")), "Rol": str(row.get("Rol", "")), "Sector": str(row.get("Sector", "")),
-                                "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
-                                "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A"),
-                                "Venc_Def_Chile": str(row.get("Venc_Def_Chile", "N/A")).replace("nan", "N/A") # <--- NUEVO
+            if archivo_vehiculos is not None:
+                df_masivo_v = pd.read_excel(archivo_vehiculos)
+                for col_fecha in ["Venc_VTV", "Venc_Seguro"]:
+                    if col_fecha in df_masivo_v.columns: df_masivo_v[col_fecha] = pd.to_datetime(df_masivo_v[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
+                st.dataframe(df_masivo_v.head())
+                
+                if st.button("🚀 Procesar Vehículos en Firebase"):
+                    barra_v = st.progress(0)
+                    tot_v = len(df_masivo_v)
+                    for i, row in df_masivo_v.iterrows():
+                        veh_str = str(row.get("Vehiculo", "")).strip()
+                        if veh_str and veh_str != "nan":
+                            db.collection("vehiculos").document(veh_str).set({
+                                "Vehiculo": veh_str, "Venc_VTV": str(row.get("Venc_VTV", "N/A")).replace("nan", "N/A"),
+                                "Venc_Seguro": str(row.get("Venc_Seguro", "N/A")).replace("nan", "N/A")
                             })
-                        except Exception: pass
-                    barra_u.progress((i + 1) / tot_u)
-                st.success(f"✅ ¡{tot_u} usuarios procesados!")
-                st.rerun()
-
-        st.markdown("---")
-        st.markdown("#### 🚘 2. Carga de Vehículos")
-        st.info("El Excel debe contener las columnas: **Vehiculo, Venc_VTV, Venc_Seguro**.")
-        archivo_vehiculos = st.file_uploader("Subir planilla de flota (.xlsx)", type=["xlsx"], key="up_veh")
-        
-        if archivo_vehiculos is not None:
-            df_masivo_v = pd.read_excel(archivo_vehiculos)
-            for col_fecha in ["Venc_VTV", "Venc_Seguro"]:
-                if col_fecha in df_masivo_v.columns: df_masivo_v[col_fecha] = pd.to_datetime(df_masivo_v[col_fecha], errors='coerce').dt.strftime('%d/%m/%Y')
-            st.dataframe(df_masivo_v.head())
-            
-            if st.button("🚀 Procesar Vehículos en Firebase"):
-                barra_v = st.progress(0)
-                tot_v = len(df_masivo_v)
-                for i, row in df_masivo_v.iterrows():
-                    veh_str = str(row.get("Vehiculo", "")).strip()
-                    if veh_str and veh_str != "nan":
-                        db.collection("vehiculos").document(veh_str).set({
-                            "Vehiculo": veh_str, "Venc_VTV": str(row.get("Venc_VTV", "N/A")).replace("nan", "N/A"),
-                            "Venc_Seguro": str(row.get("Venc_Seguro", "N/A")).replace("nan", "N/A")
-                        })
-                    barra_v.progress((i + 1) / tot_v)
-                st.success(f"✅ ¡{tot_v} vehículos cargados!")
-                st.rerun()
+                        barra_v.progress((i + 1) / tot_v)
+                    st.success(f"✅ ¡{tot_v} vehículos cargados!")
+                    st.rerun()
