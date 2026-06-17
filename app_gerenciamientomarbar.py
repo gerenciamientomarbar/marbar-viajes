@@ -912,8 +912,8 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / I
             viaje_regional = viaje_data.get("Regional", "").strip().lower()
             
             # --- FILTRO REGIONAL ESTRICTO ---
-            # El ADMIN ve todo. Los demás solo ven los viajes de su propia regional.
-            if st.session_state["usuario_actual"] == "ADMIN" or viaje_regional == mi_regional:
+            # ADMIN y Gerencia ven todo. Los demás solo ven los viajes de su propia regional.
+            if st.session_state["usuario_actual"] in ["ADMIN", "Gerencia"] or viaje_regional == mi_regional:
                 p_list.append(viaje_data)
             
         if p_list:
@@ -934,7 +934,7 @@ if st.session_state["usuario_actual"] in ["ADMIN", "Supervisor / Coordinador / I
                     else: 
                         st.error(f"🔒 Usted es {st.session_state['usuario_actual']} (Nivel {mi_nivel}). Este gerenciamiento exige firma de Nivel {nivel_viaje}.")
         else: 
-            st.info("✅ Bandeja limpia para su Regional.")
+            st.info("✅ Bandeja limpia para su alcance operativo.")
             
     except Exception as e_bandeja: 
         pass
