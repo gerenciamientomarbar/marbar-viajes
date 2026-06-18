@@ -337,12 +337,11 @@ if st.session_state["usuario_actual"] is None:
         
         if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
             if correo_configurar != "":
-                # Intentamos forzar la creación de la cuenta en Firebase Auth por si no existe
                 try:
                     pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                     auth.create_user(email=correo_configurar, password=pass_temporal)
                 except Exception: 
-                    pass # Ignoramos el error si la cuenta ya existía
+                    pass 
                     
                 url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY.strip()}"
                 try:
@@ -355,15 +354,13 @@ if st.session_state["usuario_actual"] is None:
                     st.error(f"⛔ Error de red: {e_req}")
             else: 
                 st.error("Escriba un correo válido.")
-    
-    # Detenemos la ejecución si el usuario no ha iniciado sesión
     st.stop() 
 
 # --- WORKFLOW PRINCIPAL ---
 if st.session_state["paso_actual"] == "Menu":
     st.subheader(f"Panel Operativo - Bienvenido, {st.session_state.get('nombre_empleado', 'Usuario')}")
     
-    # --- Alertas de Vencimiento ---
+    # --- Alertas de Vencimiento de Documentación ---
     if st.session_state.get("usuario_actual") != "ADMIN":
         v_lic = st.session_state.get("venc_licencia", "N/A")
         v_def = st.session_state.get("venc_defensiva", "N/A")
@@ -387,28 +384,41 @@ if st.session_state["paso_actual"] == "Menu":
                 except Exception: 
                     pass
     
-    # --- Alertas de Viajes Cerrados (Llegada/Cancelación) ---
+    # --- SISTEMA DE ALERTAS PERSISTENTES POR WHATSAPP ---
+    if "alerta_nuevo_viaje" in st.session_state:
+        v_new = st.session_state["alerta_nuevo_viaje"]
+        cabecera_wa = f"🟢 *VIAJE AUTO-APROBADO ID {v_new['id']}*" if v_new['color'] == "green" else f"🔴 *NUEVA SOLICITUD ID {v_new['id']}*"
+        tkt = f"{cabecera_wa}\n\n🔹 *Conductor:* {v_new['conductor']}\n🔹 *Vehículo:* {v_new['vehiculo']}\n🔹 *Origen:* {v_new['origen']}\n🔹 *Destino:* {v_new['destino']}\n🔹 *Riesgo:* Nivel {v_new['nivel']}"
+        link_nuevo_wa = f"https://wa.me/?text={urllib.parse.quote(tkt)}"
+        
+        st.success(f"✅ ¡Viaje registrado con éxito en el sistema (ID {v_new['id']})!")
+        st.markdown(f"### [📱 ENVIAR TICKET DE VIAJE POR WHATSAPP]({link_nuevo_wa})")
+        if st.button("Ocultar Alerta de Ticket", key="ocultar_nuevo_viaje"):
+            del st.session_state["alerta_nuevo_viaje"]
+            st.rerun()
+        st.markdown("---")
+
     if "alerta_llegada" in st.session_state:
         v_llegada = st.session_state["alerta_llegada"]
         msg_llegada_wa = f"✅ *AVISO DE LLEGADA MARBAR*\n\n🔹 *Conductor:* {st.session_state.get('nombre_empleado','')}\n🔹 *Viaje ID:* {v_llegada.get('id','')}\n🔹 *Destino:* {v_llegada.get('destino','')}\n\n👉 *Llegué bien a destino sin novedades.*"
         st.success("El viaje se cerró correctamente en el sistema operativo.")
         st.markdown(f"### [📱 ENVIAR AVISO DE LLEGADA POR WHATSAPP](https://wa.me/?text={urllib.parse.quote(msg_llegada_wa)})")
-        if st.button("Ocultar Aviso", key="ocultar_llegada"):
+        if st.button("Ocultar Aviso de Arribo", key="ocultar_llegada"):
             del st.session_state["alerta_llegada"]
             st.rerun()
         st.markdown("---")
         
     if "alerta_cancelacion" in st.session_state:
         v_canc = st.session_state["alerta_cancelacion"]
-        msg_canc_wa = f"❌ *VIAJE CANCELADO - MARBAR*\n\n🔹 *Conductor:* {st.session_state.get('nombre_empleado','')}\n🔹 *Viaje ID:* {v_canc.get('id','')}\n🔹 *Destino:* {v_canc.get('destino','')}\n\n👉 *El viaje ha sido suspendido.*"
+        msg_canc_wa = f"❌ *VIAJE CANCELADO - MARBAR*\n\n🔹 *Conductor:* {st.session_state.get('nombre_empleado','')}\n🔹 *Viaje ID:* {v_canc.get('id','')}\n🔹 *Destino:* {v_canc.get('destino','')}\n\n👉 *El viaje ha sido suspendido y cerrado.*"
         st.warning("El viaje fue cancelado y retirado de la ruta activa.")
         st.markdown(f"### [📱 ENVIAR AVISO DE CANCELACIÓN POR WHATSAPP](https://wa.me/?text={urllib.parse.quote(msg_canc_wa)})")
-        if st.button("Ocultar Aviso", key="ocultar_canc"):
+        if st.button("Ocultar Aviso de Cancelación", key="ocultar_canc"):
             del st.session_state["alerta_cancelacion"]
             st.rerun()
         st.markdown("---")
     
-    # --- Viajes Activos ---
+    # --- Gestión de Viaje en Curso del Conductor ---
     if st.session_state.get("usuario_actual") != "ADMIN":
         viajes_activos = db.collection(COLECCION_VIAJES).where("Conductor", "==", st.session_state.get("nombre_empleado")).where("Estado_Viaje", "in", ["En viaje", "En espera"]).stream()
         lista_activos = [d.to_dict() for d in viajes_activos]
@@ -445,7 +455,7 @@ if st.session_state["paso_actual"] == "Menu":
                         st.session_state["alerta_cancelacion"] = {"id": v_id, "destino": v_dest}
                         st.rerun()
 
-    # --- Botones Principales ---
+    # --- Botones del Menú Principal ---
     st.markdown("---")
     col_menu1, col_menu2 = st.columns(2)
     with col_menu1:
@@ -597,7 +607,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
         except Exception: 
             pass
 
-    with st.expander("\U0001F5FA MAPA", expanded=True): 
+    with st.expander("\U0001F5FA MAPA DE YACIMIENTOS", expanded=True): 
         components.iframe("https://www.google.com/maps/d/u/2/embed?mid=1BPDw99m6vQAC09Kdbw9Onaj5mu-blw4&ehbc=2E312F", height=480)
 
     col1, col2 = st.columns(2)
@@ -734,11 +744,21 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                 }
                 
                 if guardar_en_nube(datos):
-                    st.success("Guardado Exitoso.")
+                    # ALERTA MAESTRA PERSISTENTE: Se almacena para mostrar el ticket fijo en el Menú
+                    st.session_state["alerta_nuevo_viaje"] = {
+                        "id": nuevo_id,
+                        "conductor": nombre_conductor,
+                        "vehiculo": vehiculo_sel,
+                        "origen": origen_txt,
+                        "destino": destino_txt,
+                        "nivel": nivel_riesgo_calculado,
+                        "color": color_semaforo
+                    }
                     st.session_state["paso_actual"] = "Menu"
+                    st.rerun()
 
 elif st.session_state["paso_actual"] == "Historial":
-    st.subheader("📜 Historial")
+    st.subheader("📜 Historial de Registros")
     viajes_historicos = db.collection(COLECCION_VIAJES).stream()
     df_h = pd.DataFrame([doc.to_dict() for doc in viajes_historicos])
     
@@ -762,7 +782,7 @@ elif st.session_state["paso_actual"] == "Historial":
         st.session_state["paso_actual"] = "Menu"
         st.rerun()
 
-# --- 6. SIDEBAR ---
+# --- 6. SIDEBAR (PANEL LATERAL) ---
 if st.session_state.get("usuario_actual"):
     with st.sidebar:
         if os.path.exists("logo.png"): 
@@ -822,7 +842,7 @@ if st.session_state.get("usuario_actual"):
     except Exception: 
         pass
 
-# --- 7. BANDEJA APROBACIONES ---
+# --- 7. BANDEJA APROBACIONES (SUPERVISIÓN) ---
 if st.session_state.get("usuario_actual") in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
     st.markdown("---")
     st.title("📥 Bandeja de Validaciones")
@@ -852,7 +872,7 @@ if st.session_state.get("usuario_actual") in ["ADMIN", "Supervisor / Coordinador
                     else: 
                         st.error(f"🔒 Nivel {mi_nivel} insuficiente. Exige Nivel {n_v}.")
         else: 
-            st.info("✅ Bandeja limpia.")
+            st.info("✅ Bandeja limpia de validaciones.")
     except Exception: 
         pass
 
@@ -890,7 +910,7 @@ if st.session_state.get("usuario_actual") == "ADMIN":
                 try:
                     pass_temp = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                     auth.create_user(email=adm_email, password=pass_temp)
-                except Exception as ea: 
+                except Exception: 
                     pass
                     
                 try:
