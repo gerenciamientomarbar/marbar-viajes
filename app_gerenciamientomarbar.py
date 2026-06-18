@@ -335,18 +335,38 @@ if st.session_state["usuario_actual"] is None:
         correo_configurar = st.text_input("Correo Registrado:", key="txt_correo_config").strip().lower()
         if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
             if correo_configurar != "":
-                url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
-                payload_reset = {"requestType": "PASSWORD_RESET", "email": correo_configurar}
-                res_reset = requests.post(url_reset, json=payload_reset)
                 
-                if res_reset.status_code == 200:
-                    st.success("📩 ¡Enlace enviado con éxito! Revise su bandeja de entrada (o Spam) para establecer la contraseña.")
+                # --- NUEVA LÓGICA INTELIGENTE: CREACIÓN BAJO DEMANDA ---
+                # 1. Verificamos si el usuario EXISTE en nuestra base de datos (Firestore)
+                usuarios_ref = db.collection("usuarios").where("Email", "==", correo_configurar).stream()
+                usuario_db = None
+                for u in usuarios_ref:
+                    usuario_db = u.to_dict()
+                    break
+                
+                # Si el usuario está en la base de datos (o es el admin) avanzamos
+                if usuario_db or correo_configurar == "admin@marbar.com":
+                    
+                    # 2. Forzamos la creación de la bóveda de Auth (por si Firebase lo bloqueó en la carga masiva)
+                    try:
+                        pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+                        auth.create_user(email=correo_configurar, password=pass_temporal)
+                    except Exception:
+                        pass # Si ya existía, simplemente lo ignora de forma silenciosa
+                        
+                    # 3. Ahora sí, enviamos el correo oficial de configuración
+                    url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
+                    payload_reset = {"requestType": "PASSWORD_RESET", "email": correo_configurar}
+                    res_reset = requests.post(url_reset, json=payload_reset)
+                    
+                    if res_reset.status_code == 200:
+                        st.success("📩 ¡Enlace enviado con éxito! Revise su bandeja de entrada (o la carpeta Spam) para establecer la contraseña.")
+                    else:
+                        st.error("⛔ Hubo un error de conexión con los servidores de Google al intentar enviar el correo.")
                 else:
-                    st.error("⛔ El correo no se encuentra registrado en el sistema. Verifique con el Administrador.")
+                    st.error("⛔ El correo ingresado NO figura en la base de datos de empleados de MARBAR. Comuníquese con la gerencia.")
             else:
-                st.error("Por favor, escriba un correo electrónico válido.")
-    
-    st.stop() 
+                st.error("Por favor, escriba un correo electrónico válido.") 
 
 # --- WORKFLOW PRINCIPAL ---
 
