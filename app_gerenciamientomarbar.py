@@ -1014,6 +1014,15 @@ if st.session_state["usuario_actual"] == "ADMIN":
     with t3:
         st.subheader("⚡ Carga Masiva de Datos")
         
+        # --- SISTEMA DE MENSAJES PERSISTENTES ---
+        if "msg_masivo_u" in st.session_state:
+            st.success(st.session_state["msg_masivo_u"])
+            del st.session_state["msg_masivo_u"] # Lo borra después de mostrarlo
+            
+        if "msg_masivo_v" in st.session_state:
+            st.success(st.session_state["msg_masivo_v"])
+            del st.session_state["msg_masivo_v"]
+        
         # --- FUNCIÓN SALVAVIDAS PARA FECHAS VACÍAS ---
         def limpiar_fecha(val):
             v_str = str(val).strip()
@@ -1028,7 +1037,6 @@ if st.session_state["usuario_actual"] == "ADMIN":
         st.markdown("#### 👥 1. Carga de Usuarios")
         st.info("Columnas necesarias: DNI_USUARIO, NOMBRE, EMAIL, REGIONAL, BASE, ROL, SECTOR, VENC_LICENCIA, VENC_DEFENSIVA, VENC_DEF_CHILE")
         
-        # Ahora acepta tanto Excel como CSV
         archivo_usuarios = st.file_uploader("Subir planilla (.xlsx o .csv)", type=["xlsx", "csv"], key="up_usu")
         
         if archivo_usuarios is not None:
@@ -1038,10 +1046,8 @@ if st.session_state["usuario_actual"] == "ADMIN":
                 else:
                     df_masivo_u = pd.read_excel(archivo_usuarios)
                     
-                # 1. ESTANDARIZACIÓN EXTREMA: Quitamos espacios y pasamos todo a MAYÚSCULAS
                 df_masivo_u.columns = df_masivo_u.columns.str.strip().str.upper()
                 
-                # 2. Formateamos las fechas
                 for col in df_masivo_u.columns:
                     if "VENC" in col: 
                         df_masivo_u[col] = df_masivo_u[col].apply(limpiar_fecha)
@@ -1056,7 +1062,6 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
                     
                     for i, row in df_masivo_u.iterrows():
-                        # Búsqueda a prueba de fallos de DNI
                         dni_bruto = row.get("DNI_USUARIO", row.get("DNI", ""))
                         dni_str = str(dni_bruto).replace(".0", "").strip()
                         
@@ -1074,21 +1079,18 @@ if st.session_state["usuario_actual"] == "ADMIN":
                             elif "GERENCIA" in rol_excel: rol_oficial = "Gerencia"
                             elif "ADMIN" in rol_excel: rol_oficial = "ADMIN"
 
-                            # --- PASO 1: AUTH ---
                             try:
                                 pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                                 auth.create_user(email=email_str, password=pass_temporal)
                             except Exception: 
                                 pass 
                             
-                            # --- PASO 2: EMAIL ---
                             if es_correo_real:
                                 try:
                                     requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
                                 except Exception:
                                     pass
                                 
-                            # --- PASO 3: FIRESTORE ---
                             try:
                                 db.collection("usuarios").document(dni_str).set({
                                     "DNI_Usuario": dni_str, 
@@ -1103,13 +1105,15 @@ if st.session_state["usuario_actual"] == "ADMIN":
                                     "Venc_Def_Chile": str(row.get("VENC_DEF_CHILE", "N/A"))
                                 })
                                 procesados_reales += 1
-                            except Exception as e_db: 
-                                st.error(f"Error guardando DNI {dni_str}: {e_db}")
+                            except Exception: 
+                                pass
                                 
                         barra_u.progress((i + 1) / tot_u)
                         
-                    # ELIMINAMOS ST.RERUN() AQUI: Ahora podrás leer el mensaje tranquilamente
-                    st.success(f"✅ ¡Proceso finalizado! Se leyeron {tot_u} filas y se guardaron {procesados_reales} perfiles. Haz clic en 'Actualizar Pantalla' en el menú lateral para verlos en la tabla.")
+                    # Guardamos el mensaje en la memoria y recargamos la app para actualizar la tabla visualmente
+                    st.session_state["msg_masivo_u"] = f"✅ ¡Se leyeron {tot_u} filas y se guardaron {procesados_reales} perfiles operativos! La tabla ya está actualizada."
+                    st.rerun()
+                    
             except Exception as e_read:
                 st.error(f"Error al leer el archivo: {e_read}")
 
@@ -1152,6 +1156,8 @@ if st.session_state["usuario_actual"] == "ADMIN":
                             except Exception: pass
                         barra_v.progress((i + 1) / tot_v)
                         
-                    st.success(f"✅ ¡Se leyeron {tot_v} filas y se guardaron {v_procesados} vehículos! Haz clic en 'Actualizar Pantalla' para refrescar.")
+                    st.session_state["msg_masivo_v"] = f"✅ ¡Se leyeron {tot_v} filas y se guardaron {v_procesados} vehículos! La tabla de flota se actualizó."
+                    st.rerun()
+                    
             except Exception as e_read_v:
-                st.error(f"Error al leer el archivo: {e_read_v}")
+                st.error(f"Error al leer el archivo de flota: {e_read_v}")
