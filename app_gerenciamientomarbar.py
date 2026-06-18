@@ -40,7 +40,6 @@ text_color = "#1F2937"
 st.markdown(f"""
 <style>
     /* Ocultar elementos por defecto de Streamlit para un look corporativo */
-    #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     
     .stApp {{ 
