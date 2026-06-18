@@ -337,11 +337,12 @@ if st.session_state["usuario_actual"] is None:
         
         if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
             if correo_configurar != "":
+                # Intentamos forzar la creación de la cuenta en Firebase Auth por si no existe
                 try:
                     pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                     auth.create_user(email=correo_configurar, password=pass_temporal)
                 except Exception: 
-                    pass 
+                    pass # Ignoramos el error si la cuenta ya existía
                     
                 url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY.strip()}"
                 try:
@@ -354,6 +355,8 @@ if st.session_state["usuario_actual"] is None:
                     st.error(f"⛔ Error de red: {e_req}")
             else: 
                 st.error("Escriba un correo válido.")
+    
+    # Detenemos la ejecución si el usuario no ha iniciado sesión
     st.stop() 
 
 # --- WORKFLOW PRINCIPAL ---
@@ -744,7 +747,6 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                 }
                 
                 if guardar_en_nube(datos):
-                    # ALERTA MAESTRA PERSISTENTE: Se almacena para mostrar el ticket fijo en el Menú
                     st.session_state["alerta_nuevo_viaje"] = {
                         "id": nuevo_id,
                         "conductor": nombre_conductor,
@@ -797,29 +799,69 @@ if st.session_state.get("usuario_actual"):
             st.rerun()
 
     try:
-        df_sb = pd.DataFrame([d.to_dict() for d in db.collection(COLECCION_VIAJES).stream()])
+        viajes_sidebar = db.collection(COLECCION_VIAJES).stream()
+        lista_viajes = [doc.to_dict() for doc in viajes_sidebar]
+        df_sb = pd.DataFrame(lista_viajes)
+        
         if not df_sb.empty:
             hoy = datetime.now(TZ_AR).strftime("%d/%m/%Y")
             mes_actual = datetime.now(TZ_AR).strftime("/%m/%Y")
-            df_hoy = df_sb[df_sb.get('Fecha', pd.Series()).astype(str).str.contains(hoy, na=False)]
-            df_mes = df_sb[df_sb.get('Fecha', pd.Series()).astype(str).str.contains(mes_actual, na=False)]
-            df_p = df_hoy[df_hoy.get('Aprobacion', pd.Series()).astype(str).str.contains("Pendiente", na=False)]
-            df_r = df_sb[df_sb.get('Estado_Viaje', pd.Series()) == "En viaje"]
+            
+            # Aseguramos que la columna 'Fecha' exista y contamos
+            if 'Fecha' in df_sb.columns:
+                df_hoy = df_sb[df_sb['Fecha'].astype(str).str.contains(hoy, na=False)]
+                df_mes = df_sb[df_sb['Fecha'].astype(str).str.contains(mes_actual, na=False)]
+            else:
+                df_hoy = pd.DataFrame()
+                df_mes = pd.DataFrame()
+
+            # Aseguramos columnas de estado
+            if 'Aprobacion' in df_sb.columns:
+                df_p = df_hoy[df_hoy['Aprobacion'].astype(str).str.contains("Pendiente", na=False)]
+            else:
+                df_p = pd.DataFrame()
+
+            if 'Estado_Viaje' in df_sb.columns:
+                df_r = df_sb[df_sb['Estado_Viaje'] == "En viaje"]
+            else:
+                df_r = pd.DataFrame()
 
             with st.sidebar:
                 st.markdown("---")
+                st.subheader("📈 Resumen Global")
                 col_m1, col_m2 = st.columns(2)
-                col_m1.metric("Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pend." if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
+                col_m1.metric("Viajes Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pend." if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
                 col_m2.metric("En Ruta", str(len(df_r)))
                 
-                st.markdown("---")
-                df_sb_ord = df_sb.sort_values(by="ID", ascending=False)
-                op_sb = [""] + [f"{r.get('ID','')} - {r.get('Conductor','')}" for _, r in df_sb_ord.iterrows()]
-                v_sb = st.selectbox("Buscar ID:", op_sb)
+                col_m3, col_m4 = st.columns(2)
+                col_m3.metric("Este Mes", str(len(df_mes)))
+                col_m4.metric("Histórico", str(len(df_sb)))
                 
-                if v_sb != "":
-                    id_sb = str(v_sb.split(" - ")[0])
-                    st.download_button("📥 Descargar Ficha", generar_ficha_html(df_sb[df_sb["ID"].astype(str) == id_sb].iloc[0]), f"Auditoria_{id_sb}.html", mime="text/html")
+                st.markdown("---")
+                st.write("⚠️ **Pendientes (Hoy):**")
+                if not df_p.empty: 
+                    st.dataframe(df_p[['Conductor', 'Destino']], hide_index=True)
+                else: 
+                    st.write("✅ Al día.")
+                
+                st.markdown("---")
+                st.write("🚚 **En Ruta:**")
+                if not df_r.empty: 
+                    st.dataframe(df_r[['Conductor', 'Destino']], hide_index=True)
+                else: 
+                    st.write("✅ Ninguna.")
+
+                st.markdown("---")
+                st.subheader("📜 Ficha Rápida")
+                if "ID" in df_sb.columns and "Conductor" in df_sb.columns:
+                    df_sb_ord = df_sb.sort_values(by="ID", ascending=False)
+                    op_sb = [""] + [f"{r.get('ID','')} - {r.get('Conductor','')}" for _, r in df_sb_ord.iterrows()]
+                    v_sb = st.selectbox("Buscar ID:", op_sb)
+                    
+                    if v_sb != "":
+                        id_sb = str(v_sb.split(" - ")[0])
+                        d_sb = df_sb[df_sb["ID"].astype(str) == id_sb].iloc[0]
+                        st.download_button("📥 Descargar Ficha", generar_ficha_html(d_sb), f"Auditoria_{id_sb}.html", mime="text/html")
 
             if st.session_state.get("usuario_actual") in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
                 with st.sidebar:
@@ -839,8 +881,8 @@ if st.session_state.get("usuario_actual"):
                         df_ex.to_excel(wr, index=False, sheet_name='Auditoria_Viajes')
                         
                     st.download_button("📥 Auditoría (Excel)", bx.getvalue(), f"Auditoria_{hoy.replace('/','-')}.xlsx")
-    except Exception: 
-        pass
+    except Exception as error_sidebar: 
+        print(f"Error en sidebar: {error_sidebar}") # Silencioso en la app
 
 # --- 7. BANDEJA APROBACIONES (SUPERVISIÓN) ---
 if st.session_state.get("usuario_actual") in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
@@ -849,17 +891,30 @@ if st.session_state.get("usuario_actual") in ["ADMIN", "Supervisor / Coordinador
     
     mi_nivel = {"Conductor": 0, "Supervisor / Coordinador / Ingeniero": 1, "Jefe de Servicio": 2, "Gerencia": 3, "ADMIN": 3}.get(st.session_state.get("usuario_actual"), 0)
     mi_reg = str(st.session_state.get("regional_empleado", "")).strip().lower()
+    mi_sector = str(st.session_state.get("sector_empleado", "")).strip().lower()
+    es_admin_o_gerencia = st.session_state.get("usuario_actual") in ["ADMIN", "Gerencia"]
     
     try:
         solicitudes_pendientes = db.collection(COLECCION_VIAJES).where("Aprobacion", "==", "🔴 Pendiente").stream()
-        p_list = [d.to_dict() for d in solicitudes_pendientes if st.session_state.get("usuario_actual") in ["ADMIN", "Gerencia"] or str(d.to_dict().get("Regional", "")).strip().lower() == mi_reg]
+        p_list = []
+        
+        for doc in solicitudes_pendientes:
+            viaje_data = doc.to_dict()
+            viaje_reg = str(viaje_data.get("Regional", "")).strip().lower()
+            viaje_sec = str(viaje_data.get("Sector", "")).strip().lower()
+            
+            # Filtro: Admin/Gerencia ven todo. Supervisores ven solo su Regional Y su Sector.
+            if es_admin_o_gerencia or (viaje_reg == mi_reg and viaje_sec == mi_sector):
+                p_list.append(viaje_data)
         
         if p_list:
             for v_p in p_list:
                 n_v = v_p.get("Nivel", 1)
                 v_id = str(v_p.get("ID", "0"))
+                v_sec_disp = v_p.get('Sector', 'N/A')
                 
-                with st.expander(f"🚨 ID: {v_id} | Conductor: {v_p.get('Conductor', 'N/A')} | Nivel {n_v}"):
+                with st.expander(f"🚨 ID: {v_id} | Conductor: {v_p.get('Conductor', 'N/A')} | Sector: {v_sec_disp} | Nivel {n_v}"):
+                    st.write(f"**Ruta:** {v_p.get('Origen', '')} -> {v_p.get('Destino', '')} ({v_p.get('Puntaje', 0)} pts)")
                     if mi_nivel >= n_v:
                         if st.button(f"✍️ Aprobar {v_id}", key=f"btn_ap_{v_id}"):
                             db.collection(COLECCION_VIAJES).document(v_id).update({
@@ -872,7 +927,7 @@ if st.session_state.get("usuario_actual") in ["ADMIN", "Supervisor / Coordinador
                     else: 
                         st.error(f"🔒 Nivel {mi_nivel} insuficiente. Exige Nivel {n_v}.")
         else: 
-            st.info("✅ Bandeja limpia de validaciones.")
+            st.info("✅ Bandeja limpia. No hay solicitudes pendientes para su sector o nivel.")
     except Exception: 
         pass
 
