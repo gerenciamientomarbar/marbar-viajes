@@ -971,7 +971,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
                         pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                         auth.create_user(email=adm_email, password=pass_temporal)
                         url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
-                        requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email=adm_email"})
+                        requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": adm_email}) # <--- CORREGIDO: Usando dos puntos
                     except Exception: pass
                     
                     db.collection("usuarios").document(adm_dni).set({
