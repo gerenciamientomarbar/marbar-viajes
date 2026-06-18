@@ -1014,10 +1014,9 @@ if st.session_state["usuario_actual"] == "ADMIN":
     with t3:
         st.subheader("⚡ Carga Masiva de Datos")
         
-        # --- FUNCION SALVAVIDAS PARA FECHAS VACÍAS ---
+        # --- FUNCIÓN SALVAVIDAS PARA FECHAS VACÍAS ---
         def limpiar_fecha(val):
             v_str = str(val).strip()
-            # Si la celda está vacía o dice "nan", la salvamos poniéndole N/A
             if v_str.lower() in ["nan", "nat", "n/a", "none", "null", ""]:
                 return "N/A"
             try:
@@ -1032,9 +1031,8 @@ if st.session_state["usuario_actual"] == "ADMIN":
         
         if archivo_usuarios is not None:
             df_masivo_u = pd.read_excel(archivo_usuarios)
-            df_masivo_u.columns = df_masivo_u.columns.str.strip() # Limpia espacios invisibles en títulos
+            df_masivo_u.columns = df_masivo_u.columns.str.strip() 
             
-            # Aplicamos la función salvavidas a todas las columnas de fechas
             for col_fecha in ["Venc_Licencia", "Venc_Defensiva", "Venc_Def_Chile"]:
                 if col_fecha in df_masivo_u.columns: 
                     df_masivo_u[col_fecha] = df_masivo_u[col_fecha].apply(limpiar_fecha)
@@ -1051,35 +1049,40 @@ if st.session_state["usuario_actual"] == "ADMIN":
                 for i, row in df_masivo_u.iterrows():
                     dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
                     
-                    # Verificamos que la fila no sea un renglón en blanco del Excel
                     if dni_str and dni_str.lower() not in ["nan", "nat", "n/a", ""]:
-                        
-                        # 1. Rescate de correos vacíos
                         email_str = str(row.get("Email", "")).strip().lower()
                         es_correo_real = True
                         if email_str in ["nan", "nat", "n/a", ""]:
-                            email_str = f"{dni_str}@marbar.com" # Correo de emergencia si la celda estaba vacía
+                            email_str = f"{dni_str}@marbar.com"
                             es_correo_real = False
                             
-                        # 2. Traductor de Roles (Ignora mayúsculas/minúsculas del Excel)
                         rol_excel = str(row.get("Rol", "")).strip().upper()
                         rol_oficial = "Conductor"
-                        if any(x in rol_excel for x in ["SUPERVISOR", "COORDINADOR", "INGENIERO"]): rol_oficial = "Supervisor / Coordinador / Ingeniero"
-                        elif "JEFE" in rol_excel: rol_oficial = "Jefe de Servicio"
-                        elif "GERENCIA" in rol_excel: rol_oficial = "Gerencia"
-                        elif "ADMIN" in rol_excel: rol_oficial = "ADMIN"
+                        if any(x in rol_excel for x in ["SUPERVISOR", "COORDINADOR", "INGENIERO"]): 
+                            rol_oficial = "Supervisor / Coordinador / Ingeniero"
+                        elif "JEFE" in rol_excel: 
+                            rol_oficial = "Jefe de Servicio"
+                        elif "GERENCIA" in rol_excel: 
+                            rol_oficial = "Gerencia"
+                        elif "ADMIN" in rol_excel: 
+                            rol_oficial = "ADMIN"
 
+                        # --- PASO 1: CREACIÓN EN FIREBASE AUTH (Aislado) ---
                         try:
-                            # 3. Firebase Auth
+                            pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+                            auth.create_user(email=email_str, password=pass_temporal)
+                        except Exception: 
+                            pass # Si la cuenta ya existe, se ignora el error para continuar con los siguientes pasos
+                        
+                        # --- PASO 2: ENVÍO DE CORREO DE CONFIGURACIÓN (Aislado) ---
+                        if es_correo_real:
                             try:
-                                pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-                                auth.create_user(email=email_str, password=pass_temporal)
-                                if es_correo_real: # Solo manda mail de confirmación si no es un correo inventado
-                                    requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
-                            except Exception: 
-                                pass 
+                                requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
+                            except Exception:
+                                pass
                             
-                            # 4. Guardado final y seguro en la base de datos
+                        # --- PASO 3: GUARDADO/ACTUALIZACIÓN EN FIRESTORE (Aislado) ---
+                        try:
                             db.collection("usuarios").document(dni_str).set({
                                 "DNI_Usuario": dni_str, 
                                 "Nombre": str(row.get("Nombre", "")).strip().replace("nan", "Sin Nombre"), 
@@ -1112,7 +1115,6 @@ if st.session_state["usuario_actual"] == "ADMIN":
             df_masivo_v = pd.read_excel(archivo_vehiculos)
             df_masivo_v.columns = df_masivo_v.columns.str.strip()
             
-            # Aplicamos la misma función salvavidas para las VTV y Seguros
             for col_fecha in ["Venc_VTV", "Venc_Seguro"]:
                 if col_fecha in df_masivo_v.columns: 
                     df_masivo_v[col_fecha] = df_masivo_v[col_fecha].apply(limpiar_fecha)
