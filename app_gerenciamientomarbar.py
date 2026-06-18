@@ -1014,6 +1014,17 @@ if st.session_state["usuario_actual"] == "ADMIN":
     with t3:
         st.subheader("⚡ Carga Masiva de Datos")
         
+        # --- FUNCION SALVAVIDAS PARA FECHAS VACÍAS ---
+        def limpiar_fecha(val):
+            v_str = str(val).strip()
+            # Si la celda está vacía o dice "nan", la salvamos poniéndole N/A
+            if v_str.lower() in ["nan", "nat", "n/a", "none", "null", ""]:
+                return "N/A"
+            try:
+                return pd.to_datetime(val).strftime("%d/%m/%Y")
+            except:
+                return "N/A"
+                
         # --- CARGA MASIVA DE USUARIOS ---
         st.markdown("#### 👥 1. Carga de Usuarios")
         st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Base, Rol, Sector, Venc_Licencia, Venc_Defensiva, Venc_Def_Chile**.")
@@ -1021,14 +1032,12 @@ if st.session_state["usuario_actual"] == "ADMIN":
         
         if archivo_usuarios is not None:
             df_masivo_u = pd.read_excel(archivo_usuarios)
+            df_masivo_u.columns = df_masivo_u.columns.str.strip() # Limpia espacios invisibles en títulos
             
-            # 1. LIMPIEZA DE COLUMNAS (Quita espacios invisibles que arruinan la lectura)
-            df_masivo_u.columns = df_masivo_u.columns.str.strip()
-            
-            # 2. FORMATO DE FECHAS
+            # Aplicamos la función salvavidas a todas las columnas de fechas
             for col_fecha in ["Venc_Licencia", "Venc_Defensiva", "Venc_Def_Chile"]:
                 if col_fecha in df_masivo_u.columns: 
-                    df_masivo_u[col_fecha] = pd.to_datetime(df_masivo_u[col_fecha], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
+                    df_masivo_u[col_fecha] = df_masivo_u[col_fecha].apply(limpiar_fecha)
                     
             st.dataframe(df_masivo_u.head())
             
@@ -1040,51 +1049,48 @@ if st.session_state["usuario_actual"] == "ADMIN":
                 url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
                 
                 for i, row in df_masivo_u.iterrows():
-                    # Extracción segura de DNI y Email
-                    dni_bruto = row.get("DNI_Usuario", "")
-                    email_bruto = row.get("Email", "")
+                    dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
                     
-                    dni_str = str(dni_bruto).replace(".0", "").strip()
-                    email_str = str(email_bruto).strip().lower()
-                    
-                    if dni_str and dni_str.lower() != "nan" and email_str and email_str.lower() != "nan":
+                    # Verificamos que la fila no sea un renglón en blanco del Excel
+                    if dni_str and dni_str.lower() not in ["nan", "nat", "n/a", ""]:
                         
-                        # --- TRADUCTOR INTELIGENTE DE ROLES (Soluciona el problema de las mayúsculas) ---
+                        # 1. Rescate de correos vacíos
+                        email_str = str(row.get("Email", "")).strip().lower()
+                        es_correo_real = True
+                        if email_str in ["nan", "nat", "n/a", ""]:
+                            email_str = f"{dni_str}@marbar.com" # Correo de emergencia si la celda estaba vacía
+                            es_correo_real = False
+                            
+                        # 2. Traductor de Roles (Ignora mayúsculas/minúsculas del Excel)
                         rol_excel = str(row.get("Rol", "")).strip().upper()
-                        rol_oficial = "Conductor" # Nivel básico por defecto
-                        
-                        if "SUPERVISOR" in rol_excel or "COORDINADOR" in rol_excel or "INGENIERO" in rol_excel:
-                            rol_oficial = "Supervisor / Coordinador / Ingeniero"
-                        elif "JEFE" in rol_excel:
-                            rol_oficial = "Jefe de Servicio"
-                        elif "GERENCIA" in rol_excel:
-                            rol_oficial = "Gerencia"
-                        elif "ADMIN" in rol_excel:
-                            rol_oficial = "ADMIN"
-                        elif "CONDUCTOR" in rol_excel or "CHOFER" in rol_excel:
-                            rol_oficial = "Conductor"
+                        rol_oficial = "Conductor"
+                        if any(x in rol_excel for x in ["SUPERVISOR", "COORDINADOR", "INGENIERO"]): rol_oficial = "Supervisor / Coordinador / Ingeniero"
+                        elif "JEFE" in rol_excel: rol_oficial = "Jefe de Servicio"
+                        elif "GERENCIA" in rol_excel: rol_oficial = "Gerencia"
+                        elif "ADMIN" in rol_excel: rol_oficial = "ADMIN"
 
                         try:
-                            # Intento de creación en Auth y envío de correo
+                            # 3. Firebase Auth
                             try:
                                 pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                                 auth.create_user(email=email_str, password=pass_temporal)
-                                requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
+                                if es_correo_real: # Solo manda mail de confirmación si no es un correo inventado
+                                    requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
                             except Exception: 
                                 pass 
                             
-                            # Guardado en base de datos
+                            # 4. Guardado final y seguro en la base de datos
                             db.collection("usuarios").document(dni_str).set({
                                 "DNI_Usuario": dni_str, 
-                                "Nombre": str(row.get("Nombre", "")).strip(), 
+                                "Nombre": str(row.get("Nombre", "")).strip().replace("nan", "Sin Nombre"), 
                                 "Email": email_str, 
-                                "Regional": str(row.get("Regional", "")).strip(), 
-                                "Base": str(row.get("Base", "")).strip(), 
+                                "Regional": str(row.get("Regional", "")).strip().replace("nan", "N/A"), 
+                                "Base": str(row.get("Base", "")).strip().replace("nan", "N/A"), 
                                 "Rol": rol_oficial, 
-                                "Sector": str(row.get("Sector", "")).strip(),
-                                "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")).replace("nan", "N/A"),
-                                "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")).replace("nan", "N/A"),
-                                "Venc_Def_Chile": str(row.get("Venc_Def_Chile", "N/A")).replace("nan", "N/A")
+                                "Sector": str(row.get("Sector", "")).strip().replace("nan", "N/A"),
+                                "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")),
+                                "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")),
+                                "Venc_Def_Chile": str(row.get("Venc_Def_Chile", "N/A"))
                             })
                             procesados_reales += 1
                         except Exception: 
@@ -1104,12 +1110,12 @@ if st.session_state["usuario_actual"] == "ADMIN":
         
         if archivo_vehiculos is not None:
             df_masivo_v = pd.read_excel(archivo_vehiculos)
-            
             df_masivo_v.columns = df_masivo_v.columns.str.strip()
             
+            # Aplicamos la misma función salvavidas para las VTV y Seguros
             for col_fecha in ["Venc_VTV", "Venc_Seguro"]:
                 if col_fecha in df_masivo_v.columns: 
-                    df_masivo_v[col_fecha] = pd.to_datetime(df_masivo_v[col_fecha], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
+                    df_masivo_v[col_fecha] = df_masivo_v[col_fecha].apply(limpiar_fecha)
                     
             st.dataframe(df_masivo_v.head())
             
@@ -1120,11 +1126,11 @@ if st.session_state["usuario_actual"] == "ADMIN":
                 
                 for i, row in df_masivo_v.iterrows():
                     veh_str = str(row.get("Vehiculo", "")).strip()
-                    if veh_str and veh_str.lower() != "nan":
+                    if veh_str and veh_str.lower() not in ["nan", "nat", "n/a", ""]:
                         db.collection("vehiculos").document(veh_str).set({
                             "Vehiculo": veh_str, 
-                            "Venc_VTV": str(row.get("Venc_VTV", "N/A")).replace("nan", "N/A"),
-                            "Venc_Seguro": str(row.get("Venc_Seguro", "N/A")).replace("nan", "N/A")
+                            "Venc_VTV": str(row.get("Venc_VTV", "N/A")),
+                            "Venc_Seguro": str(row.get("Venc_Seguro", "N/A"))
                         })
                         v_procesados += 1
                     barra_v.progress((i + 1) / tot_v)
