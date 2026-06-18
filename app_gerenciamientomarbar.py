@@ -334,7 +334,7 @@ if st.session_state["usuario_actual"] is None:
                 except Exception:
                     pass 
                     
-                url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
+                url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY.strip()}"
                 payload_reset = {"requestType": "PASSWORD_RESET", "email": correo_configurar}
                 
                 try:
@@ -342,12 +342,12 @@ if st.session_state["usuario_actual"] is None:
                     if res_reset.status_code == 200:
                         st.success(f"📩 ¡Enlace enviado con éxito a **{correo_configurar}**! Revise su bandeja de entrada (o la carpeta Spam).")
                     else:
-                        st.error("⛔ Firebase rebotó el envío. Verifique que el correo esté bien escrito.")
+                        # AQUÍ ESTÁ LA CLAVE: Mostramos el error desnudo
+                        st.error(f"⛔ Error oculto de Google: {res_reset.text}")
                 except Exception as e_req:
                     st.error(f"⛔ Error de red: {e_req}")
             else:
-                st.error("Por favor, escriba un correo electrónico válido.")
-    st.stop() 
+                st.error("Por favor, escriba un correo electrónico válido.") 
 
 # --- WORKFLOW PRINCIPAL ---
 if st.session_state["paso_actual"] == "Menu":
