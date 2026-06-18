@@ -955,7 +955,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
         adm_dni = st.text_input("DNI:").strip()
         col_reg_base = st.columns(2)
         with col_reg_base[0]: adm_regional = st.text_input("Regional (Ej: Neuquén, Chile):").strip()
-        with col_reg_base[1]: adm_base = st.text_input("Base Operativa (Ej: Base Cipolletti):").strip() # <--- NUEVO
+        with col_reg_base[1]: adm_base = st.text_input("Base Operativa (Ej: Base Cipolletti):").strip()
         adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia", "Completacion"])
         adm_rol = st.selectbox("Rol:", ["Conductor", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "ADMIN"])
         
@@ -965,18 +965,17 @@ if st.session_state["usuario_actual"] == "ADMIN":
         with col_v3: adm_venc_def_chile = st.date_input("Venc. Defensiva Chile:", value=datetime.now(TZ_AR).date(), format="DD/MM/YYYY")
         
         if st.button("💾 Asignar Perfil Operativo"):
-            if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "" and adm_base != "": # <--- NUEVO
+            if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "" and adm_base != "":
                 try:
                     try:
                         pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                         auth.create_user(email=adm_email, password=pass_temporal)
                         url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
-                        requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": adm_email})
+                        requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email=adm_email"})
                     except Exception: pass
                     
                     db.collection("usuarios").document(adm_dni).set({
-                        "DNI_Usuario": adm_dni, "Nombre": adm_nombre, "Email": adm_email, 
-                        "Regional": adm_regional, "Base": adm_base, # <--- NUEVO
+                        "DNI_Usuario": adm_dni, "Nombre": adm_nombre, "Email": adm_email, "Regional": adm_regional, "Base": adm_base,
                         "Rol": adm_rol, "Sector": adm_sector, 
                         "Venc_Licencia": adm_venc_lic.strftime("%d/%m/%Y"),
                         "Venc_Defensiva": adm_venc_def.strftime("%d/%m/%Y"),
@@ -986,6 +985,25 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     st.rerun()
                 except Exception as e: st.error(f"Error de Firebase: {e}")
             else: st.error("Complete todos los campos de texto, incluyendo la Regional y la Base.")
+                
+        st.markdown("---")
+        st.subheader("👥 Perfiles Operativos Registrados")
+        df_u = obtener_usuarios()
+        if not df_u.empty:
+            st.dataframe(df_u, hide_index=True, use_container_width=True)
+        else:
+            st.info("ℹ️ No se detectan perfiles operativos registrados en la colección de Firestore.")
+            
+        lista_borrar_u = [""]
+        if not df_u.empty and "DNI_Usuario" in df_u.columns:
+            for index, row in df_u.iterrows():
+                if row.get("Rol") != "ADMIN" and row.get("Email") != "admin@marbar.com": 
+                    lista_borrar_u.append(str(row["DNI_Usuario"]))
+        elim_u = st.selectbox("Borrar Perfil Operativo (DNI):", lista_borrar_u)
+        if st.button("❌ Dar de Baja"): 
+            if elim_u.strip() != "": 
+                db.collection("usuarios").document(elim_u.strip()).delete()
+                st.rerun()
 
     with t2:
         st.info("💡 Agregue las unidades de la flota y su documentación. El sistema bloqueará automáticamente los viajes si la VTV o el Seguro están vencidos.")
@@ -1014,16 +1032,22 @@ if st.session_state["usuario_actual"] == "ADMIN":
     with t3:
         st.subheader("⚡ Carga Masiva de Datos")
         
-        # --- SISTEMA DE MENSAJES PERSISTENTES ---
+        # Muestra mensajes de éxito diferidos despues del rerun
         if "msg_masivo_u" in st.session_state:
             st.success(st.session_state["msg_masivo_u"])
-            del st.session_state["msg_masivo_u"] # Lo borra después de mostrarlo
+            del st.session_state["msg_masivo_u"]
             
+        # Muestra la lista de errores si Firestore rechazó alguna fila
+        if "err_masivo_u" in st.session_state:
+            st.error("❌ Alerta: Los siguientes registros arrojaron errores en la base de datos:")
+            for err in st.session_state["err_masivo_u"]:
+                st.write(err)
+            del st.session_state["err_masivo_u"]
+        
         if "msg_masivo_v" in st.session_state:
             st.success(st.session_state["msg_masivo_v"])
             del st.session_state["msg_masivo_v"]
         
-        # --- FUNCIÓN SALVAVIDAS PARA FECHAS VACÍAS ---
         def limpiar_fecha(val):
             v_str = str(val).strip()
             if v_str.lower() in ["nan", "nat", "n/a", "none", "null", ""]:
@@ -1033,7 +1057,6 @@ if st.session_state["usuario_actual"] == "ADMIN":
             except:
                 return "N/A"
                 
-        # --- CARGA MASIVA DE USUARIOS ---
         st.markdown("#### 👥 1. Carga de Usuarios")
         st.info("Columnas necesarias: DNI_USUARIO, NOMBRE, EMAIL, REGIONAL, BASE, ROL, SECTOR, VENC_LICENCIA, VENC_DEFENSIVA, VENC_DEF_CHILE")
         
@@ -1058,6 +1081,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     barra_u = st.progress(0)
                     tot_u = len(df_masivo_u)
                     procesados_reales = 0
+                    lista_errores = []
                     
                     url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
                     
@@ -1105,21 +1129,21 @@ if st.session_state["usuario_actual"] == "ADMIN":
                                     "Venc_Def_Chile": str(row.get("VENC_DEF_CHILE", "N/A"))
                                 })
                                 procesados_reales += 1
-                            except Exception: 
-                                pass
+                            except Exception as e_db: 
+                                lista_errores.append(f"Fila {i+2} (DNI {dni_str}): {str(e_db)}")
                                 
                         barra_u.progress((i + 1) / tot_u)
                         
-                    # Guardamos el mensaje en la memoria y recargamos la app para actualizar la tabla visualmente
-                    st.session_state["msg_masivo_u"] = f"✅ ¡Se leyeron {tot_u} filas y se guardaron {procesados_reales} perfiles operativos! La tabla ya está actualizada."
+                    st.session_state["msg_masivo_u"] = f"✅ ¡Se procesaron {tot_u} filas del archivo y se asentaron {procesados_reales} perfiles en la base de datos!"
+                    if lista_errores:
+                        st.session_state["err_masivo_u"] = lista_errores
+                        
                     st.rerun()
                     
             except Exception as e_read:
                 st.error(f"Error al leer el archivo: {e_read}")
 
         st.markdown("---")
-        
-        # --- CARGA MASIVA DE VEHÍCULOS ---
         st.markdown("#### 🚘 2. Carga de Vehículos")
         archivo_vehiculos = st.file_uploader("Subir planilla de flota (.xlsx o .csv)", type=["xlsx", "csv"], key="up_veh")
         
@@ -1150,14 +1174,13 @@ if st.session_state["usuario_actual"] == "ADMIN":
                                 db.collection("vehiculos").document(veh_str).set({
                                     "Vehiculo": veh_str, 
                                     "Venc_VTV": str(row.get("VENC_VTV", "N/A")),
-                                    "Venc_Seguro": str(row.get("VENC_SEGURO", "N/A"))
+                                    "Venc_SEGURO": str(row.get("VENC_SEGURO", "N/A"))
                                 })
                                 v_procesados += 1
                             except Exception: pass
                         barra_v.progress((i + 1) / tot_v)
                         
-                    st.session_state["msg_masivo_v"] = f"✅ ¡Se leyeron {tot_v} filas y se guardaron {v_procesados} vehículos! La tabla de flota se actualizó."
+                    st.session_state["msg_masivo_v"] = f"✅ ¡Se leyeron {tot_v} filas y se guardaron {v_procesados} vehículos!"
                     st.rerun()
-                    
             except Exception as e_read_v:
                 st.error(f"Error al leer el archivo de flota: {e_read_v}")
