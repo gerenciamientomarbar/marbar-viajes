@@ -325,41 +325,32 @@ if st.session_state["usuario_actual"] is None:
     with tab_recupero:
         st.write("Si es su primer ingreso o ha olvidado su clave, ingrese su correo corporativo. Le enviaremos un enlace oficial para configurar su nueva contraseña.")
         correo_configurar = st.text_input("Correo Registrado:", key="txt_correo_config").strip().lower()
+        
         if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
             if correo_configurar != "":
-                usuarios_ref = db.collection("usuarios").stream()
-                usuario_db = None
                 
-                for u in usuarios_ref:
-                    data = u.to_dict()
-                    mail_guardado = str(data.get("Email", data.get("EMAIL", data.get("email", "")))).strip().lower()
-                    if mail_guardado == correo_configurar:
-                        usuario_db = data
-                        break
-                
-                if usuario_db or correo_configurar == "admin@marbar.com":
-                    try:
-                        pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-                        auth.create_user(email=correo_configurar, password=pass_temporal)
-                    except Exception:
-                        pass 
-                        
-                    url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
-                    payload_reset = {"requestType": "PASSWORD_RESET", "email": correo_configurar}
+                # 1. Intentamos crear el casillero en Firebase Auth (por si no existe)
+                try:
+                    pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+                    auth.create_user(email=correo_configurar, password=pass_temporal)
+                except Exception:
+                    pass # Si el usuario ya existe en Auth (como viste en tu pantalla), simplemente lo ignora y avanza
                     
-                    try:
-                        res_reset = requests.post(url_reset, json=payload_reset)
-                        if res_reset.status_code == 200:
-                            st.success("📩 ¡Enlace enviado con éxito! Revise su bandeja de entrada (o la carpeta Spam) para establecer la contraseña.")
-                        else:
-                            st.error(f"⛔ Error de Google Auth: {res_reset.text}")
-                    except Exception as e_req:
-                        st.error(f"⛔ Error de red al intentar enviar el correo: {e_req}")
-                else:
-                    st.error("⛔ El correo ingresado NO figura en la base de datos de empleados de MARBAR. Comuníquese con la gerencia.")
+                # 2. Obligamos a Firebase a mandar el correo directamente
+                url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
+                payload_reset = {"requestType": "PASSWORD_RESET", "email": correo_configurar}
+                
+                try:
+                    res_reset = requests.post(url_reset, json=payload_reset)
+                    if res_reset.status_code == 200:
+                        st.success(f"📩 ¡Enlace enviado con éxito a **{correo_configurar}**! Revise su bandeja de entrada (o la carpeta Spam).")
+                    else:
+                        # Si Firebase detecta que el correo es inválido, nos dirá por qué
+                        st.error(f"⛔ Firebase rebotó el envío: {res_reset.json().get('error', {}).get('message', 'Error desconocido')}")
+                except Exception as e_req:
+                    st.error(f"⛔ Error de red: {e_req}")
             else:
-                st.error("Por favor, escriba un correo electrónico válido.")
-    st.stop() 
+                st.error("Por favor, escriba un correo electrónico válido.") 
 
 # --- WORKFLOW PRINCIPAL ---
 if st.session_state["paso_actual"] == "Menu":
