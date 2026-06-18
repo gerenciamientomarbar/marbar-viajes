@@ -1014,7 +1014,6 @@ if st.session_state["usuario_actual"] == "ADMIN":
     with t3:
         st.subheader("⚡ Carga Masiva de Datos")
         
-        # --- FUNCIÓN SALVAVIDAS PARA FECHAS VACÍAS ---
         def limpiar_fecha(val):
             v_str = str(val).strip()
             if v_str.lower() in ["nan", "nat", "n/a", "none", "null", ""]:
@@ -1024,118 +1023,80 @@ if st.session_state["usuario_actual"] == "ADMIN":
             except:
                 return "N/A"
                 
-        # --- CARGA MASIVA DE USUARIOS ---
         st.markdown("#### 👥 1. Carga de Usuarios")
-        st.info("El Excel debe contener las columnas: **DNI_Usuario, Nombre, Email, Regional, Base, Rol, Sector, Venc_Licencia, Venc_Defensiva, Venc_Def_Chile**.")
         archivo_usuarios = st.file_uploader("Subir planilla de empleados (.xlsx)", type=["xlsx"], key="up_usu")
         
         if archivo_usuarios is not None:
-            df_masivo_u = pd.read_excel(archivo_usuarios)
-            df_masivo_u.columns = df_masivo_u.columns.str.strip() 
-            
-            for col_fecha in ["Venc_Licencia", "Venc_Defensiva", "Venc_Def_Chile"]:
-                if col_fecha in df_masivo_u.columns: 
-                    df_masivo_u[col_fecha] = df_masivo_u[col_fecha].apply(limpiar_fecha)
-                    
-            st.dataframe(df_masivo_u.head())
-            
-            if st.button("🚀 Procesar Usuarios en Firebase"):
-                barra_u = st.progress(0)
-                tot_u = len(df_masivo_u)
-                procesados_reales = 0
+            try:
+                df_masivo_u = pd.read_excel(archivo_usuarios)
+                df_masivo_u.columns = df_masivo_u.columns.str.strip() 
                 
-                url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
-                
-                for i, row in df_masivo_u.iterrows():
-                    dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
-                    
-                    if dni_str and dni_str.lower() not in ["nan", "nat", "n/a", ""]:
-                        email_str = str(row.get("Email", "")).strip().lower()
-                        es_correo_real = True
-                        if email_str in ["nan", "nat", "n/a", ""]:
-                            email_str = f"{dni_str}@marbar.com"
-                            es_correo_real = False
-                            
-                        rol_excel = str(row.get("Rol", "")).strip().upper()
-                        rol_oficial = "Conductor"
-                        if any(x in rol_excel for x in ["SUPERVISOR", "COORDINADOR", "INGENIERO"]): 
-                            rol_oficial = "Supervisor / Coordinador / Ingeniero"
-                        elif "JEFE" in rol_excel: 
-                            rol_oficial = "Jefe de Servicio"
-                        elif "GERENCIA" in rol_excel: 
-                            rol_oficial = "Gerencia"
-                        elif "ADMIN" in rol_excel: 
-                            rol_oficial = "ADMIN"
-
-                        # --- PASO 1: CREACIÓN EN FIREBASE AUTH (Aislado) ---
-                        try:
-                            pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-                            auth.create_user(email=email_str, password=pass_temporal)
-                        except Exception: 
-                            pass # Si la cuenta ya existe, se ignora el error para continuar con los siguientes pasos
+                for col_fecha in ["Venc_Licencia", "Venc_Defensiva", "Venc_Def_Chile"]:
+                    if col_fecha in df_masivo_u.columns: 
+                        df_masivo_u[col_fecha] = df_masivo_u[col_fecha].apply(limpiar_fecha)
                         
-                        # --- PASO 2: ENVÍO DE CORREO DE CONFIGURACIÓN (Aislado) ---
-                        if es_correo_real:
-                            try:
-                                requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
-                            except Exception:
-                                pass
-                            
-                        # --- PASO 3: GUARDADO/ACTUALIZACIÓN EN FIRESTORE (Aislado) ---
-                        try:
-                            db.collection("usuarios").document(dni_str).set({
-                                "DNI_Usuario": dni_str, 
-                                "Nombre": str(row.get("Nombre", "")).strip().replace("nan", "Sin Nombre"), 
-                                "Email": email_str, 
-                                "Regional": str(row.get("Regional", "")).strip().replace("nan", "N/A"), 
-                                "Base": str(row.get("Base", "")).strip().replace("nan", "N/A"), 
-                                "Rol": rol_oficial, 
-                                "Sector": str(row.get("Sector", "")).strip().replace("nan", "N/A"),
-                                "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")),
-                                "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")),
-                                "Venc_Def_Chile": str(row.get("Venc_Def_Chile", "N/A"))
-                            })
-                            procesados_reales += 1
-                        except Exception: 
-                            pass
-                            
-                    barra_u.progress((i + 1) / tot_u)
-                    
-                st.success(f"✅ ¡Se leyeron {tot_u} filas y se guardaron {procesados_reales} perfiles correctamente! Revisa la pestaña 'Usuarios'.")
-                st.rerun()
-
-        st.markdown("---")
-        
-        # --- CARGA MASIVA DE VEHÍCULOS ---
-        st.markdown("#### 🚘 2. Carga de Vehículos")
-        st.info("El Excel debe contener las columnas: **Vehiculo, Venc_VTV, Venc_Seguro**.")
-        archivo_vehiculos = st.file_uploader("Subir planilla de flota (.xlsx)", type=["xlsx"], key="up_veh")
-        
-        if archivo_vehiculos is not None:
-            df_masivo_v = pd.read_excel(archivo_vehiculos)
-            df_masivo_v.columns = df_masivo_v.columns.str.strip()
-            
-            for col_fecha in ["Venc_VTV", "Venc_Seguro"]:
-                if col_fecha in df_masivo_v.columns: 
-                    df_masivo_v[col_fecha] = df_masivo_v[col_fecha].apply(limpiar_fecha)
-                    
-            st.dataframe(df_masivo_v.head())
-            
-            if st.button("🚀 Procesar Vehículos en Firebase"):
-                barra_v = st.progress(0)
-                tot_v = len(df_masivo_v)
-                v_procesados = 0
+                st.dataframe(df_masivo_u.head())
                 
-                for i, row in df_masivo_v.iterrows():
-                    veh_str = str(row.get("Vehiculo", "")).strip()
-                    if veh_str and veh_str.lower() not in ["nan", "nat", "n/a", ""]:
-                        db.collection("vehiculos").document(veh_str).set({
-                            "Vehiculo": veh_str, 
-                            "Venc_VTV": str(row.get("Venc_VTV", "N/A")),
-                            "Venc_Seguro": str(row.get("Venc_Seguro", "N/A"))
-                        })
-                        v_procesados += 1
-                    barra_v.progress((i + 1) / tot_v)
+                if st.button("🚀 Procesar Usuarios en Firebase"):
+                    barra_u = st.progress(0)
+                    tot_u = len(df_masivo_u)
+                    procesados_reales = 0
                     
-                st.success(f"✅ ¡Se leyeron {tot_v} filas y se guardaron {v_procesados} vehículos!")
-                st.rerun()
+                    url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
+                    
+                    for i, row in df_masivo_u.iterrows():
+                        dni_str = str(row.get("DNI_Usuario", "")).replace(".0", "").strip()
+                        
+                        if dni_str and dni_str.lower() not in ["nan", "nat", "n/a", ""]:
+                            email_str = str(row.get("Email", "")).strip().lower()
+                            es_correo_real = True
+                            if email_str in ["nan", "nat", "n/a", ""]:
+                                email_str = f"{dni_str}@marbar.com"
+                                es_correo_real = False
+                                
+                            rol_excel = str(row.get("Rol", "")).strip().upper()
+                            rol_oficial = "Conductor"
+                            if any(x in rol_excel for x in ["SUPERVISOR", "COORDINADOR", "INGENIERO"]): rol_oficial = "Supervisor / Coordinador / Ingeniero"
+                            elif "JEFE" in rol_excel: rol_oficial = "Jefe de Servicio"
+                            elif "GERENCIA" in rol_excel: rol_oficial = "Gerencia"
+                            elif "ADMIN" in rol_excel: rol_oficial = "ADMIN"
+
+                            # 1. AUTH
+                            try:
+                                pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+                                auth.create_user(email=email_str, password=pass_temporal)
+                            except Exception as e_auth: 
+                                # Mostramos el error de Auth solo si NO es el típico "el correo ya existe"
+                                if "ALREADY_EXISTS" not in str(e_auth).upper():
+                                    st.warning(f"⚠️ Aviso en Auth (DNI {dni_str}): {e_auth}")
+                            
+                            # 2. EMAIL
+                            if es_correo_real:
+                                try:
+                                    requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": email_str})
+                                except Exception as e_mail:
+                                    st.warning(f"⚠️ No se pudo enviar el correo a {email_str}: {e_mail}")
+                                
+                            # 3. FIRESTORE
+                            try:
+                                db.collection("usuarios").document(dni_str).set({
+                                    "DNI_Usuario": dni_str, 
+                                    "Nombre": str(row.get("Nombre", "")).strip().replace("nan", "Sin Nombre"), 
+                                    "Email": email_str, 
+                                    "Regional": str(row.get("Regional", "")).strip().replace("nan", "N/A"), 
+                                    "Base": str(row.get("Base", "")).strip().replace("nan", "N/A"), 
+                                    "Rol": rol_oficial, 
+                                    "Sector": str(row.get("Sector", "")).strip().replace("nan", "N/A"),
+                                    "Venc_Licencia": str(row.get("Venc_Licencia", "N/A")),
+                                    "Venc_Defensiva": str(row.get("Venc_Defensiva", "N/A")),
+                                    "Venc_Def_Chile": str(row.get("Venc_Def_Chile", "N/A"))
+                                })
+                                procesados_reales += 1
+                            except Exception as e_db: 
+                                st.error(f"❌ ERROR FATAL guardando DNI {dni_str} en la base de datos: {e_db}")
+                                
+                        barra_u.progress((i + 1) / tot_u)
+                        
+                    st.success(f"✅ ¡Se leyeron {tot_u} filas y se guardaron {procesados_reales} perfiles! Revisa los mensajes arriba si el número no coincide.")
+            except Exception as e_excel:
+                st.error(f"❌ Error al leer el archivo Excel: {e_excel}")
