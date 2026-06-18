@@ -337,12 +337,11 @@ if st.session_state["usuario_actual"] is None:
         
         if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
             if correo_configurar != "":
-                # Intentamos forzar la creación de la cuenta en Firebase Auth por si no existe
                 try:
                     pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                     auth.create_user(email=correo_configurar, password=pass_temporal)
                 except Exception: 
-                    pass # Ignoramos el error si la cuenta ya existía
+                    pass 
                     
                 url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY.strip()}"
                 try:
@@ -356,14 +355,12 @@ if st.session_state["usuario_actual"] is None:
             else: 
                 st.error("Escriba un correo válido.")
     
-    # Detenemos la ejecución si el usuario no ha iniciado sesión
     st.stop() 
 
 # --- WORKFLOW PRINCIPAL ---
 if st.session_state["paso_actual"] == "Menu":
     st.subheader(f"Panel Operativo - Bienvenido, {st.session_state.get('nombre_empleado', 'Usuario')}")
     
-    # --- Alertas de Vencimiento de Documentación ---
     if st.session_state.get("usuario_actual") != "ADMIN":
         v_lic = st.session_state.get("venc_licencia", "N/A")
         v_def = st.session_state.get("venc_defensiva", "N/A")
@@ -387,7 +384,6 @@ if st.session_state["paso_actual"] == "Menu":
                 except Exception: 
                     pass
     
-    # --- SISTEMA DE ALERTAS PERSISTENTES POR WHATSAPP ---
     if "alerta_nuevo_viaje" in st.session_state:
         v_new = st.session_state["alerta_nuevo_viaje"]
         cabecera_wa = f"🟢 *VIAJE AUTO-APROBADO ID {v_new['id']}*" if v_new['color'] == "green" else f"🔴 *NUEVA SOLICITUD ID {v_new['id']}*"
@@ -421,7 +417,6 @@ if st.session_state["paso_actual"] == "Menu":
             st.rerun()
         st.markdown("---")
     
-    # --- Gestión de Viaje en Curso del Conductor ---
     if st.session_state.get("usuario_actual") != "ADMIN":
         viajes_activos = db.collection(COLECCION_VIAJES).where("Conductor", "==", st.session_state.get("nombre_empleado")).where("Estado_Viaje", "in", ["En viaje", "En espera"]).stream()
         lista_activos = [d.to_dict() for d in viajes_activos]
@@ -458,7 +453,6 @@ if st.session_state["paso_actual"] == "Menu":
                         st.session_state["alerta_cancelacion"] = {"id": v_id, "destino": v_dest}
                         st.rerun()
 
-    # --- Botones del Menú Principal ---
     st.markdown("---")
     col_menu1, col_menu2 = st.columns(2)
     with col_menu1:
@@ -807,20 +801,27 @@ if st.session_state.get("usuario_actual"):
             hoy = datetime.now(TZ_AR).strftime("%d/%m/%Y")
             mes_actual = datetime.now(TZ_AR).strftime("/%m/%Y")
             
-            # Aseguramos que la columna 'Fecha' exista y contamos
-            if 'Fecha' in df_sb.columns:
-                df_hoy = df_sb[df_sb['Fecha'].astype(str).str.contains(hoy, na=False)]
-                df_mes = df_sb[df_sb['Fecha'].astype(str).str.contains(mes_actual, na=False)]
+            # --- BLINDAJE DE MÉTRICAS (EXCLUYE CANCELADOS) ---
+            # Filtramos todos los viajes que NO estén cancelados para los contadores de Hoy y Mes
+            df_activos_reales = df_sb[df_sb.get('Estado_Viaje', pd.Series()) != "Cancelado"]
+            
+            if 'Fecha' in df_activos_reales.columns:
+                df_hoy = df_activos_reales[df_activos_reales['Fecha'].astype(str).str.contains(hoy, na=False)]
+                df_mes = df_activos_reales[df_activos_reales['Fecha'].astype(str).str.contains(mes_actual, na=False)]
             else:
                 df_hoy = pd.DataFrame()
                 df_mes = pd.DataFrame()
 
-            # Aseguramos columnas de estado
-            if 'Aprobacion' in df_sb.columns:
-                df_p = df_hoy[df_hoy['Aprobacion'].astype(str).str.contains("Pendiente", na=False)]
+            # PENDIENTES REALES: Aprobación "Pendiente" Y Estado "En espera" (excluye Cancelados)
+            if 'Aprobacion' in df_hoy.columns and 'Estado_Viaje' in df_hoy.columns:
+                df_p = df_hoy[
+                    (df_hoy['Aprobacion'].astype(str).str.contains("Pendiente", na=False)) & 
+                    (df_hoy['Estado_Viaje'] == "En espera")
+                ]
             else:
                 df_p = pd.DataFrame()
 
+            # EN RUTA REALES: Estado exacto "En viaje"
             if 'Estado_Viaje' in df_sb.columns:
                 df_r = df_sb[df_sb['Estado_Viaje'] == "En viaje"]
             else:
@@ -828,7 +829,7 @@ if st.session_state.get("usuario_actual"):
 
             with st.sidebar:
                 st.markdown("---")
-                st.subheader("📈 Resumen Global")
+                st.subheader("📈 Resumen Global Operativo")
                 col_m1, col_m2 = st.columns(2)
                 col_m1.metric("Viajes Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pend." if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
                 col_m2.metric("En Ruta", str(len(df_r)))
@@ -882,7 +883,7 @@ if st.session_state.get("usuario_actual"):
                         
                     st.download_button("📥 Auditoría (Excel)", bx.getvalue(), f"Auditoria_{hoy.replace('/','-')}.xlsx")
     except Exception as error_sidebar: 
-        print(f"Error en sidebar: {error_sidebar}") # Silencioso en la app
+        print(f"Error en sidebar: {error_sidebar}")
 
 # --- 7. BANDEJA APROBACIONES (SUPERVISIÓN) ---
 if st.session_state.get("usuario_actual") in ["ADMIN", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
@@ -895,7 +896,8 @@ if st.session_state.get("usuario_actual") in ["ADMIN", "Supervisor / Coordinador
     es_admin_o_gerencia = st.session_state.get("usuario_actual") in ["ADMIN", "Gerencia"]
     
     try:
-        solicitudes_pendientes = db.collection(COLECCION_VIAJES).where("Aprobacion", "==", "🔴 Pendiente").stream()
+        # Se buscan las solicitudes pendientes Y que no estén canceladas por el conductor
+        solicitudes_pendientes = db.collection(COLECCION_VIAJES).where("Aprobacion", "==", "🔴 Pendiente").where("Estado_Viaje", "==", "En espera").stream()
         p_list = []
         
         for doc in solicitudes_pendientes:
@@ -903,7 +905,7 @@ if st.session_state.get("usuario_actual") in ["ADMIN", "Supervisor / Coordinador
             viaje_reg = str(viaje_data.get("Regional", "")).strip().lower()
             viaje_sec = str(viaje_data.get("Sector", "")).strip().lower()
             
-            # Filtro: Admin/Gerencia ven todo. Supervisores ven solo su Regional Y su Sector.
+            # Filtro estricto: Admin/Gerencia ven todo. Supervisores ven solo su Regional Y su Sector.
             if es_admin_o_gerencia or (viaje_reg == mi_reg and viaje_sec == mi_sector):
                 p_list.append(viaje_data)
         
