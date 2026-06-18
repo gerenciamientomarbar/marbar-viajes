@@ -324,6 +324,7 @@ if st.session_state["usuario_actual"] is None:
 
     with tab_recupero:
         st.write("Si es su primer ingreso o ha olvidado su clave, ingrese su correo corporativo. Le enviaremos un enlace oficial para configurar su nueva contraseña.")
+        # .strip() elimina espacios al principio y al final antes de mandarlo
         correo_configurar = st.text_input("Correo Registrado:", key="txt_correo_config").strip().lower()
         
         if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
@@ -342,7 +343,6 @@ if st.session_state["usuario_actual"] is None:
                     if res_reset.status_code == 200:
                         st.success(f"📩 ¡Enlace enviado con éxito a **{correo_configurar}**! Revise su bandeja de entrada (o la carpeta Spam).")
                     else:
-                        # AQUÍ ESTÁ LA CLAVE: Mostramos el error desnudo
                         st.error(f"⛔ Error oculto de Google: {res_reset.text}")
                 except Exception as e_req:
                     st.error(f"⛔ Error de red: {e_req}")
@@ -843,20 +843,23 @@ if st.session_state["usuario_actual"] == "ADMIN":
         with col_v3: adm_venc_def_chile = st.date_input("Venc. Defensiva Chile:", value=datetime.now(TZ_AR).date(), format="DD/MM/YYYY")
         
         if st.button("💾 Asignar Perfil Operativo"):
-            if adm_email != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "" and adm_base != "":
+            # Blindamos las variables eliminando espacios muertos
+            adm_email_limpio = adm_email.strip().lower()
+            
+            if adm_email_limpio != "" and adm_nombre != "" and adm_dni != "" and adm_regional != "" and adm_base != "":
                 try:
                     try:
                         pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-                        auth.create_user(email=adm_email, password=pass_temporal)
-                        url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
-                        requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": adm_email})
+                        auth.create_user(email=adm_email_limpio, password=pass_temporal)
+                        url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY.strip()}"
+                        requests.post(url_reset, json={"requestType": "PASSWORD_RESET", "email": adm_email_limpio})
                     except Exception: pass
                     db.collection("usuarios").document(adm_dni).set({
-                        "DNI_Usuario": adm_dni, "Nombre": adm_nombre, "Email": adm_email, "Regional": adm_regional, "Base": adm_base,
+                        "DNI_Usuario": adm_dni, "Nombre": adm_nombre, "Email": adm_email_limpio, "Regional": adm_regional, "Base": adm_base,
                         "Rol": adm_rol, "Sector": adm_sector, "Venc_Licencia": adm_venc_lic.strftime("%d/%m/%Y"),
                         "Venc_Defensiva": adm_venc_def.strftime("%d/%m/%Y"), "Venc_Def_Chile": adm_venc_def_chile.strftime("%d/%m/%Y")
                     })
-                    st.success(f"✅ ¡Perfil asignado con éxito! Se ha enviado un correo a {adm_email} para configurar la clave.")
+                    st.success(f"✅ ¡Perfil asignado con éxito! Se ha enviado un correo a {adm_email_limpio} para configurar la clave.")
                     st.rerun()
                 except Exception as e: st.error(f"Error de Firebase: {e}")
             else: st.error("Complete todos los campos de texto.")
