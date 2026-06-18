@@ -1065,11 +1065,14 @@ if st.session_state["usuario_actual"] == "ADMIN":
         if archivo_usuarios is not None:
             try:
                 if archivo_usuarios.name.endswith('.csv'):
-                    df_masivo_u = pd.read_csv(archivo_usuarios)
+                    df_masivo_u = pd.read_csv(archivo_usuarios, dtype=str) # <-- Forzamos lectura como string desde el inicio
                 else:
-                    df_masivo_u = pd.read_excel(archivo_usuarios)
+                    df_masivo_u = pd.read_excel(archivo_usuarios, dtype=str) # <-- Forzamos lectura como string desde el inicio
                     
                 df_masivo_u.columns = df_masivo_u.columns.str.strip().str.upper()
+                
+                # Reemplazamos todos los valores NaN/nulos por strings vacíos para evitar que Firebase reciba floats
+                df_masivo_u = df_masivo_u.fillna("")
                 
                 for col in df_masivo_u.columns:
                     if "VENC" in col: 
@@ -1087,7 +1090,11 @@ if st.session_state["usuario_actual"] == "ADMIN":
                     
                     for i, row in df_masivo_u.iterrows():
                         dni_bruto = row.get("DNI_USUARIO", row.get("DNI", ""))
-                        dni_str = str(dni_bruto).replace(".0", "").strip()
+                        # Limpiamos decimales fantasmas que Python agrega (.0)
+                        if isinstance(dni_bruto, str) and dni_bruto.endswith(".0"):
+                            dni_bruto = dni_bruto[:-2]
+                            
+                        dni_str = str(dni_bruto).strip()
                         
                         if dni_str and dni_str.lower() not in ["nan", "nat", "n/a", "none", "null", ""]:
                             email_str = str(row.get("EMAIL", "")).strip().lower()
@@ -1117,13 +1124,13 @@ if st.session_state["usuario_actual"] == "ADMIN":
                                 
                             try:
                                 db.collection("usuarios").document(dni_str).set({
-                                    "DNI_Usuario": dni_str, 
-                                    "Nombre": str(row.get("NOMBRE", "")).strip().replace("nan", "Sin Nombre"), 
-                                    "Email": email_str, 
-                                    "Regional": str(row.get("REGIONAL", "")).strip().replace("nan", "N/A"), 
-                                    "Base": str(row.get("BASE", "")).strip().replace("nan", "N/A"), 
-                                    "Rol": rol_oficial, 
-                                    "Sector": str(row.get("SECTOR", "")).strip().replace("nan", "N/A"),
+                                    "DNI_Usuario": str(dni_str), 
+                                    "Nombre": str(row.get("NOMBRE", "")).strip() or "Sin Nombre", 
+                                    "Email": str(email_str), 
+                                    "Regional": str(row.get("REGIONAL", "")).strip() or "N/A", 
+                                    "Base": str(row.get("BASE", "")).strip() or "N/A", 
+                                    "Rol": str(rol_oficial), 
+                                    "Sector": str(row.get("SECTOR", "")).strip() or "N/A",
                                     "Venc_Licencia": str(row.get("VENC_LICENCIA", "N/A")),
                                     "Venc_Defensiva": str(row.get("VENC_DEFENSIVA", "N/A")),
                                     "Venc_Def_Chile": str(row.get("VENC_DEF_CHILE", "N/A"))
@@ -1150,11 +1157,12 @@ if st.session_state["usuario_actual"] == "ADMIN":
         if archivo_vehiculos is not None:
             try:
                 if archivo_vehiculos.name.endswith('.csv'):
-                    df_masivo_v = pd.read_csv(archivo_vehiculos)
+                    df_masivo_v = pd.read_csv(archivo_vehiculos, dtype=str) # <-- Forzamos lectura como string desde el inicio
                 else:
-                    df_masivo_v = pd.read_excel(archivo_vehiculos)
+                    df_masivo_v = pd.read_excel(archivo_vehiculos, dtype=str) # <-- Forzamos lectura como string desde el inicio
                     
                 df_masivo_v.columns = df_masivo_v.columns.str.strip().str.upper()
+                df_masivo_v = df_masivo_v.fillna("")
                 
                 for col in df_masivo_v.columns:
                     if "VENC" in col: 
@@ -1172,7 +1180,7 @@ if st.session_state["usuario_actual"] == "ADMIN":
                         if veh_str and veh_str.lower() not in ["nan", "nat", "n/a", "none", "null", ""]:
                             try:
                                 db.collection("vehiculos").document(veh_str).set({
-                                    "Vehiculo": veh_str, 
+                                    "Vehiculo": str(veh_str), 
                                     "Venc_VTV": str(row.get("VENC_VTV", "N/A")),
                                     "Venc_SEGURO": str(row.get("VENC_SEGURO", "N/A"))
                                 })
