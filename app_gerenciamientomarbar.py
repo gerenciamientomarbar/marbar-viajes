@@ -328,15 +328,12 @@ if st.session_state["usuario_actual"] is None:
         
         if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
             if correo_configurar != "":
-                
-                # 1. Intentamos crear el casillero en Firebase Auth (por si no existe)
                 try:
                     pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                     auth.create_user(email=correo_configurar, password=pass_temporal)
                 except Exception:
-                    pass # Si el usuario ya existe en Auth (como viste en tu pantalla), simplemente lo ignora y avanza
+                    pass 
                     
-                # 2. Obligamos a Firebase a mandar el correo directamente
                 url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY}"
                 payload_reset = {"requestType": "PASSWORD_RESET", "email": correo_configurar}
                 
@@ -345,12 +342,12 @@ if st.session_state["usuario_actual"] is None:
                     if res_reset.status_code == 200:
                         st.success(f"📩 ¡Enlace enviado con éxito a **{correo_configurar}**! Revise su bandeja de entrada (o la carpeta Spam).")
                     else:
-                        # Si Firebase detecta que el correo es inválido, nos dirá por qué
-                        st.error(f"⛔ Firebase rebotó el envío: {res_reset.json().get('error', {}).get('message', 'Error desconocido')}")
+                        st.error(f"⛔ Firebase rebotó el envío: {res_reset.json().get('error', {{}}).get('message', 'Error desconocido')}")
                 except Exception as e_req:
                     st.error(f"⛔ Error de red: {e_req}")
             else:
-                st.error("Por favor, escriba un correo electrónico válido.") 
+                st.error("Por favor, escriba un correo electrónico válido.")
+    st.stop() 
 
 # --- WORKFLOW PRINCIPAL ---
 if st.session_state["paso_actual"] == "Menu":
