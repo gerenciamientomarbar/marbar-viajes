@@ -342,7 +342,7 @@ if st.session_state["usuario_actual"] is None:
                     if res_reset.status_code == 200:
                         st.success(f"📩 ¡Enlace enviado con éxito a **{correo_configurar}**! Revise su bandeja de entrada (o la carpeta Spam).")
                     else:
-                        st.error(f"⛔ Firebase rebotó el envío: {res_reset.json().get('error', {{}}).get('message', 'Error desconocido')}")
+                        st.error("⛔ Firebase rebotó el envío. Verifique que el correo esté bien escrito.")
                 except Exception as e_req:
                     st.error(f"⛔ Error de red: {e_req}")
             else:
