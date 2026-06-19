@@ -573,16 +573,25 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     
     nivel_aprobacion_usuario = {"Conductor": 0, "Supervisor / Coordinador / Ingeniero": 1, "Jefe de Servicio": 2, "Gerencia": 3, "ADMIN": 3}.get(rol_usuario, 0)
     
+    st.markdown("### 1. Datos Generales")
+    st.info(f"👤 **Conductor:** {nombre_conductor} | **Regional:** {regional_usuario} | **Base:** {base_usuario} | **Sector:** {sector_usuario}")
+
+    # --- BLINDAJE DE VEHÍCULO OBLIGATORIO ---
     df_flota = obtener_vehiculos()
     if not df_flota.empty:
-        opciones_flota = df_flota.get("Vehiculo", pd.Series(["⚠️ Cargar flota en Admin"])).tolist()
+        # Insertamos un valor vacío al inicio para forzar la elección manual
+        opciones_flota = [""] + df_flota["Vehiculo"].tolist()
     else:
         opciones_flota = ["⚠️ Cargar flota en Admin"]
         
-    vehiculo_sel = st.selectbox("Unidad:", opciones_flota)
-    vehiculo_inhabilitado = False
+    vehiculo_sel = st.selectbox("Unidad / Vehículo a utilizar:", opciones_flota, index=0)
     
-    if vehiculo_sel != "⚠️ Cargar flota en Admin" and not df_flota.empty:
+    # Cartel de advertencia dinámico si no eligieron nada aún
+    if vehiculo_sel == "":
+        st.warning("⚠️ OBLIGATORIO: Seleccione la patente/interno asignado antes de confirmar el viaje.")
+
+    vehiculo_inhabilitado = False
+    if vehiculo_sel not in ["", "⚠️ Cargar flota en Admin"] and not df_flota.empty:
         try:
             datos_vehiculo = df_flota[df_flota["Vehiculo"] == vehiculo_sel].iloc[0]
             hoy_dt = datetime.now(TZ_AR).date()
@@ -667,10 +676,12 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             st.rerun()
     with col_btn2:
         if st.button("CONFIRMAR VIAJE"):
+            # AQUI SE VALIDA QUE EL VEHICULO NO SEA UN STRING VACIO
             campos_ok = all([
                 origen_txt.strip(), 
                 destino_txt.strip(), 
                 (dur_horas is not None or dur_minutos is not None), 
+                vehiculo_sel != "",  # <-- VALIDACIÓN DEL BLINDAJE
                 vehiculo_sel != "⚠️ Cargar flota en Admin", 
                 not vehiculo_inhabilitado, 
                 salida_tipo, 
@@ -686,7 +697,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             ])
             
             if not campos_ok: 
-                st.error("⛔ Faltan datos obligatorios.")
+                st.error("⛔ Faltan datos obligatorios. Verifique haber seleccionado una Unidad/Vehículo en la sección superior.")
             elif v_pasajeros == "Con pasajeros" and not pasajeros_detalle.strip(): 
                 st.error("⚠️ Ingrese el nombre de los pasajeros.")
             else:
@@ -717,15 +728,9 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                     "Salida": salida_tipo, 
                     "Alarma Nocturna": "encendida" if v_horario == "Nocturno" else "apagada", 
                     "Origen": origen_txt, 
-                    "Destino": destino_txt, 
-                    "Estado": aprobacion_estado, 
-                    "Puntaje": puntos_totales, 
-                    "Nivel": nivel_riesgo_calculado, 
-                    "Aprobacion": aprob_db, 
-                    "Aprobador": aprobador_db, 
-                    "Fecha_Aprobacion": fecha_aprob_db, 
-                    "Estado_Viaje": est_v_db, 
-                    "Fecha_Fin": "En curso", 
+                    "Destino": destino_txt, "Estado": aprobacion_estado, "Puntaje": puntos_totales, 
+                    "Nivel": nivel_riesgo_calculado, "Aprobacion": aprob_db, "Aprobador": aprobador_db, 
+                    "Fecha_Aprobacion": fecha_aprob_db, "Estado_Viaje": est_v_db, "Fecha_Fin": "En curso", 
                     "Checklist_Eq": st.session_state.get("resp_eq", {}), 
                     "Checklist_Doc": st.session_state.get("resp_doc", {}), 
                     "R_Distancia": v_distancia, 
