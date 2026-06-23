@@ -728,9 +728,18 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                     "Salida": salida_tipo, 
                     "Alarma Nocturna": "encendida" if v_horario == "Nocturno" else "apagada", 
                     "Origen": origen_txt, 
-                    "Destino": destino_txt, "Estado": aprobacion_estado, "Puntaje": puntos_totales, 
-                    "Nivel": nivel_riesgo_calculado, "Aprobacion": aprob_db, "Aprobador": aprobador_db, 
-                    "Fecha_Aprobacion": fecha_aprob_db, "Estado_Viaje": est_v_db, "Fecha_Fin": "En curso", 
+                    "Destino": destino_txt, 
+                    "Estado": aprobacion_estado, 
+                    "Puntaje": puntos_totales, 
+                    "Nivel": nivel_riesgo_calculado, 
+                    
+                    # --- CORRECCIÓN DE ACENTOS PARA EL PANEL DE ADMIN ---
+                    "Aprobación": aprob_db, 
+                    "Aprobador": aprobador_db, 
+                    "Fecha_Aprobación": fecha_aprob_db, 
+                    
+                    "Estado_Viaje": est_v_db, 
+                    "Fecha_Fin": "En curso", 
                     "Checklist_Eq": st.session_state.get("resp_eq", {}), 
                     "Checklist_Doc": st.session_state.get("resp_doc", {}), 
                     "R_Distancia": v_distancia, 
