@@ -566,27 +566,23 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     st.subheader("🛡️ Paso 3: Análisis de Riesgo")
     
     sector_usuario = str(st.session_state.get("sector_empleado", "N/A"))
-    rol_usuario = str(st.session_state.get("usuario_actual", "N/A"))
+    rol_usuario = str(st.session_state.get("usuario_actual", "N/A")).strip().upper()
     nombre_conductor = str(st.session_state.get("nombre_empleado", "N/A"))
     regional_usuario = str(st.session_state.get("regional_empleado", "No asignada"))
     base_usuario = str(st.session_state.get("base_empleado", "No asignada"))
     
-    nivel_aprobacion_usuario = {"Conductor": 0, "Supervisor / Coordinador / Ingeniero": 1, "Jefe de Servicio": 2, "Gerencia": 3, "ADMIN": 3}.get(rol_usuario, 0)
+    # Soporte para ADMIN en cualquier formato
+    mapa_autoridad = {"CONDUCTOR": 0, "SUPERVISOR / COORDINADOR / INGENIERO": 1, "JEFE DE SERVICIO": 2, "GERENCIA": 3, "ADMIN": 3, "ADMINISTRADOR": 3}
+    nivel_aprobacion_usuario = mapa_autoridad.get(rol_usuario, 0)
     
-    st.markdown("### 1. Datos Generales")
-    st.info(f"👤 **Conductor:** {nombre_conductor} | **Regional:** {regional_usuario} | **Base:** {base_usuario} | **Sector:** {sector_usuario}")
-
-    # --- BLINDAJE DE VEHÍCULO OBLIGATORIO ---
     df_flota = obtener_vehiculos()
     if not df_flota.empty:
-        # Insertamos un valor vacío al inicio para forzar la elección manual
-        opciones_flota = [""] + df_flota["Vehiculo"].tolist()
+        opciones_flota = [""] + df_flota.get("Vehiculo", pd.Series(["⚠️ Cargar flota en Admin"])).tolist()
     else:
-        opciones_flota = ["⚠️ Cargar flota en Admin"]
+        opciones_flota = ["", "⚠️ Cargar flota en Admin"]
         
     vehiculo_sel = st.selectbox("Unidad / Vehículo a utilizar:", opciones_flota, index=0)
     
-    # Cartel de advertencia dinámico si no eligieron nada aún
     if vehiculo_sel == "":
         st.warning("⚠️ OBLIGATORIO: Seleccione la patente/interno asignado antes de confirmar el viaje.")
 
@@ -620,8 +616,9 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     with col2: destino_txt = st.text_input("Destino:")
     
     col_dur_h, col_dur_m = st.columns(2)
-    with col_dur_h: dur_horas = st.number_input("Horas (HH):", min_value=0, max_value=72, value=None, step=1)
-    with col_dur_m: dur_minutos = st.number_input("Minutos (MM):", min_value=0, max_value=59, value=None, step=1)
+    # Cambio aquí: Empiezan en 0 para evitar errores matemáticos, se valida al final
+    with col_dur_h: dur_horas = st.number_input("Horas (HH):", min_value=0, max_value=72, value=0, step=1)
+    with col_dur_m: dur_minutos = st.number_input("Minutos (MM):", min_value=0, max_value=59, value=0, step=1)
     
     salida_tipo = st.radio("Salida:", ["Planificada", "Urgencia"], index=None)
     v_distancia = st.radio("Distancia:", ["< 50km", "< 100km", "< 200km", "> 200km"], index=None)
@@ -676,12 +673,13 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             st.rerun()
     with col_btn2:
         if st.button("CONFIRMAR VIAJE"):
-            # AQUI SE VALIDA QUE EL VEHICULO NO SEA UN STRING VACIO
+            duracion_es_cero = (dur_horas == 0 and dur_minutos == 0)
+            
             campos_ok = all([
                 origen_txt.strip(), 
                 destino_txt.strip(), 
-                (dur_horas is not None or dur_minutos is not None), 
-                vehiculo_sel != "",  # <-- VALIDACIÓN DEL BLINDAJE
+                not duracion_es_cero, # Valida que hayan puesto algún número
+                vehiculo_sel != "", 
                 vehiculo_sel != "⚠️ Cargar flota en Admin", 
                 not vehiculo_inhabilitado, 
                 salida_tipo, 
@@ -697,7 +695,10 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             ])
             
             if not campos_ok: 
-                st.error("⛔ Faltan datos obligatorios. Verifique haber seleccionado una Unidad/Vehículo en la sección superior.")
+                if duracion_es_cero:
+                    st.error("⛔ Ingrese la duración estimada del trayecto.")
+                else:
+                    st.error("⛔ Faltan datos obligatorios. Verifique haber seleccionado una Unidad/Vehículo en la sección superior.")
             elif v_pasajeros == "Con pasajeros" and not pasajeros_detalle.strip(): 
                 st.error("⚠️ Ingrese el nombre de los pasajeros.")
             else:
@@ -724,7 +725,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                     "Sector": sector_usuario, 
                     "Cargo": rol_usuario, 
                     "Vehiculo": vehiculo_sel, 
-                    "Duracion": f"{int(dur_horas or 0):02d}:{int(dur_minutos or 0):02d} Hs", 
+                    "Duracion": f"{int(dur_horas):02d}:{int(dur_minutos):02d} Hs", 
                     "Salida": salida_tipo, 
                     "Alarma Nocturna": "encendida" if v_horario == "Nocturno" else "apagada", 
                     "Origen": origen_txt, 
@@ -732,12 +733,9 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                     "Estado": aprobacion_estado, 
                     "Puntaje": puntos_totales, 
                     "Nivel": nivel_riesgo_calculado, 
-                    
-                    # --- CORRECCIÓN DE ACENTOS PARA EL PANEL DE ADMIN ---
-                    "Aprobación": aprob_db, 
+                    "Aprobacion": aprob_db, 
                     "Aprobador": aprobador_db, 
-                    "Fecha_Aprobación": fecha_aprob_db, 
-                    
+                    "Fecha_Aprobacion": fecha_aprob_db, 
                     "Estado_Viaje": est_v_db, 
                     "Fecha_Fin": "En curso", 
                     "Checklist_Eq": st.session_state.get("resp_eq", {}), 
