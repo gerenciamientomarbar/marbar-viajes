@@ -40,7 +40,6 @@ text_color = "#1F2937"
 st.markdown(f"""
 <style>
     /* Ocultar elementos por defecto de Streamlit para un look corporativo */
-    /* EL MAIN MENU ESTÁ HABILITADO PARA PODER CAMBIAR A MODO CLARO (LIGHT THEME) */
     footer {{visibility: hidden;}}
     
     .stApp {{ 
@@ -93,10 +92,10 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # -----------------------------------------
-# FUNCIONES DE COMUNICACIÓN OPTIMIZADAS (CACHÉ)
+# FUNCIONES DE COMUNICACIÓN OPTIMIZADAS (CACHÉ DE RECURSOS)
 # -----------------------------------------
 
-@st.cache_data(ttl=300) # Guarda en memoria por 5 minutos para ahorrar consultas
+@st.cache_resource(ttl=300) # Se cambió a cache_resource para evitar que Arrow rompa los diccionarios internos
 def obtener_usuarios_cached():
     try:
         usuarios_ref = db.collection("usuarios").stream()
@@ -104,10 +103,11 @@ def obtener_usuarios_cached():
         for doc in usuarios_ref:
             lista_usuarios.append(doc.to_dict())
         return pd.DataFrame(lista_usuarios)
-    except Exception:
+    except Exception as e:
+        print(f"Error usuarios: {e}")
         return pd.DataFrame()
 
-@st.cache_data(ttl=300)
+@st.cache_resource(ttl=300)
 def obtener_vehiculos_cached():
     try:
         vehiculos_ref = db.collection("vehiculos").stream()
@@ -119,10 +119,11 @@ def obtener_vehiculos_cached():
             return pd.DataFrame(lista_vehiculos)
         else:
             return pd.DataFrame(columns=["Vehiculo"])
-    except Exception:
+    except Exception as e:
+        print(f"Error vehiculos: {e}")
         return pd.DataFrame(columns=["Vehiculo"])
 
-@st.cache_data(ttl=300)
+@st.cache_resource(ttl=300)
 def obtener_viajes_cached():
     try:
         viajes_ref = db.collection(COLECCION_VIAJES).stream()
@@ -130,7 +131,8 @@ def obtener_viajes_cached():
         for doc in viajes_ref:
             lista_viajes.append(doc.to_dict())
         return pd.DataFrame(lista_viajes)
-    except Exception:
+    except Exception as e:
+        print(f"Error viajes: {e}")
         return pd.DataFrame()
 
 def obtener_siguiente_id():
@@ -147,7 +149,7 @@ def guardar_en_nube(datos_viaje):
     try:
         db.collection(COLECCION_VIAJES).document(str(datos_viaje.get("ID", 0))).set(datos_viaje)
         # Limpiamos la caché para que el nuevo viaje aparezca de inmediato
-        st.cache_data.clear()
+        st.cache_resource.clear()
         return True
     except Exception:
         return False
@@ -360,11 +362,12 @@ if st.session_state["usuario_actual"] is None:
         
         if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
             if correo_configurar != "":
+                # Intentamos forzar la creación de la cuenta en Firebase Auth por si no existe
                 try:
                     pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                     auth.create_user(email=correo_configurar, password=pass_temporal)
                 except Exception: 
-                    pass 
+                    pass # Ignoramos el error si la cuenta ya existía
                     
                 url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY.strip()}"
                 try:
@@ -378,6 +381,7 @@ if st.session_state["usuario_actual"] is None:
             else: 
                 st.error("Escriba un correo válido.")
     
+    # Detenemos la ejecución si el usuario no ha iniciado sesión
     st.stop() 
 
 # --- WORKFLOW PRINCIPAL ---
@@ -472,7 +476,7 @@ if st.session_state["paso_actual"] == "Menu":
                                 "Estado_Viaje": "Finalizado", 
                                 "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                             })
-                            st.cache_data.clear() # Limpia la memoria para que desaparezca
+                            st.cache_resource.clear() # Limpia la memoria para que desaparezca
                             st.session_state["alerta_llegada"] = {"id": v_id, "destino": v_dest}
                             st.rerun()
                             
@@ -481,7 +485,7 @@ if st.session_state["paso_actual"] == "Menu":
                                 "Estado_Viaje": "Cancelado", 
                                 "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                             })
-                            st.cache_data.clear() # Limpia la memoria para que desaparezca
+                            st.cache_resource.clear() # Limpia la memoria para que desaparezca
                             st.session_state["alerta_cancelacion"] = {"id": v_id, "destino": v_dest}
                             st.rerun()
 
@@ -808,7 +812,7 @@ elif st.session_state["paso_actual"] == "Historial":
             df_h = df_h.sort_values(by="ID", ascending=False)
             st.dataframe(df_h[['ID', 'Fecha', 'Origen', 'Destino', 'Estado_Viaje']], hide_index=True)
             
-            op_dd = [""] + [f"{r.get('ID','')} - {str(r.get('Fecha',''))[:10]}" for _, r in df_h.iterrows()]
+            op_dd = [""] + [f"{r.get('ID','')} - {r.get('Conductor','')} - {str(r.get('Fecha',''))[:10]}" for _, r in df_h.iterrows()]
             v_sel = st.selectbox("Seleccione viaje:", op_dd)
             
             if v_sel != "":
@@ -828,7 +832,7 @@ if st.session_state.get("usuario_actual"):
         st.header("📊 SSA & Logística")
         
         if st.button("🔄 Actualizar", use_container_width=True): 
-            st.cache_data.clear()
+            st.cache_resource.clear()
             st.rerun()
             
         if st.button("🚪 Cerrar Sesión", use_container_width=True): 
@@ -973,7 +977,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR", "SUPERVISOR / COORDINADOR / INGENIERO",
                                     "Fecha_Aprobacion": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S"), 
                                     "Estado_Viaje": "En viaje"
                                 })
-                                st.cache_data.clear()
+                                st.cache_resource.clear()
                                 st.rerun()
                         else: 
                             st.error(f"🔒 Nivel {mi_nivel} insuficiente. Exige Nivel {n_v}.")
@@ -1038,7 +1042,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                     "Venc_Defensiva": adm_venc_def.strftime("%d/%m/%Y"), 
                     "Venc_Def_Chile": adm_venc_def_chile.strftime("%d/%m/%Y")
                 })
-                st.cache_data.clear()
+                st.cache_resource.clear()
                 st.success("✅ Guardado en base de datos operativa.")
                 st.rerun()
             else: 
@@ -1052,7 +1056,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
             
             if st.button("❌ Dar de Baja") and elim_u: 
                 db.collection("usuarios").document(elim_u).delete()
-                st.cache_data.clear()
+                st.cache_resource.clear()
                 st.rerun()
 
     with t2:
@@ -1069,7 +1073,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                 "Venc_VTV": adm_venc_vtv.strftime("%d/%m/%Y"), 
                 "Venc_Seguro": adm_venc_seguro.strftime("%d/%m/%Y")
             })
-            st.cache_data.clear()
+            st.cache_resource.clear()
             st.rerun()
             
         df_v = obtener_vehiculos_cached()
@@ -1078,7 +1082,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
             elim_v = st.selectbox("Borrar Equipo:", [""] + df_v.get("Vehiculo", pd.Series()).tolist())
             if st.button("❌ Retirar Unidad") and elim_v: 
                 db.collection("vehiculos").document(elim_v).delete()
-                st.cache_data.clear()
+                st.cache_resource.clear()
                 st.rerun()
 
     with t3:
@@ -1161,7 +1165,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                             proc_u += 1
                         br_u.progress((i + 1) / t_u)
                         
-                    st.cache_data.clear()
+                    st.cache_resource.clear()
                     st.session_state["msg_masivo_u"] = f"✅ ¡{proc_u} perfiles operativos guardados de {t_u} filas!"
                     st.rerun()
             except Exception as e_r: 
@@ -1199,7 +1203,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                             p_v += 1
                         br_v.progress((i + 1) / t_v)
                         
-                    st.cache_data.clear()
+                    st.cache_resource.clear()
                     st.session_state["msg_masivo_v"] = f"✅ ¡{p_v} vehículos guardados!"
                     st.rerun()
             except Exception as e_rv: 
