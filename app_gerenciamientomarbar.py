@@ -462,33 +462,41 @@ if st.session_state["paso_actual"] == "Menu":
                         estado_aprobacion = str(v.get("Aprobacion", "🔴 Pendiente"))
                         v_id = str(v.get("ID", "0"))
                         v_dest = str(v.get("Destino", "N/A"))
+                        v_orig = str(v.get("Origen", "N/A"))
+                        v_veh = str(v.get("Vehiculo", "N/A"))
+                        v_niv = str(v.get("Nivel", "1"))
                         
+                        # Mostramos el estado y generamos el Link de WhatsApp permanente
                         if "Aprobado" in estado_aprobacion: 
                             st.success(f"🚀 **VIAJE AUTORIZADO (ID {v_id})**\n\nEl supervisor ya firmó digitalmente. Está habilitado hacia **{v_dest}**.")
+                            tkt_wa = f"🟢 *VIAJE EN CURSO ID {v_id}*\n\n🔹 *Conductor:* {st.session_state.get('nombre_empleado')}\n🔹 *Vehículo:* {v_veh}\n🔹 *Origen:* {v_orig}\n🔹 *Destino:* {v_dest}\n🔹 *Estado:* Autorizado"
+                            st.markdown(f"#### [📱 COMPARTIR TICKET POR WHATSAPP](https://wa.me/?text={urllib.parse.quote(tkt_wa)})")
                         else: 
                             st.warning(f"⏳ **ESPERANDO APROBACIÓN (ID {v_id})**\n\nSu solicitud requiere validación. **No mueva la unidad.**")
+                            tkt_req = f"🔴 *SOLICITUD DE APROBACIÓN ID {v_id}*\n\n🔹 *Conductor:* {st.session_state.get('nombre_empleado')}\n🔹 *Vehículo:* {v_veh}\n🔹 *Origen:* {v_orig}\n🔹 *Destino:* {v_dest}\n🔹 *Riesgo:* Nivel {v_niv}\n\n👉 *Solicito autorización en el sistema MARBAR para iniciar marcha.*"
+                            st.markdown(f"#### [📱 NOTIFICAR A SUPERVISOR POR WHATSAPP](https://wa.me/?text={urllib.parse.quote(tkt_req)})")
                         
-                        col_info, col_accion, col_canc = st.columns([1, 1, 1])
-                        col_info.write(f"**Gestión ID {v_id}**")
+                        st.write("---")
+                        col_accion, col_canc = st.columns(2)
                         
-                        if col_accion.button(f"🏁 Llegar", key=f"menu_fin_{v_id}"):
+                        if col_accion.button(f"🏁 Informar Llegada", key=f"menu_fin_{v_id}", use_container_width=True):
                             db.collection(COLECCION_VIAJES).document(v_id).update({
                                 "Estado_Viaje": "Finalizado", 
                                 "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                             })
-                            st.cache_resource.clear() # Limpia la memoria para que desaparezca
+                            st.cache_resource.clear() 
                             st.session_state["alerta_llegada"] = {"id": v_id, "destino": v_dest}
                             st.rerun()
                             
-                        if col_canc.button(f"❌ Cancelar", key=f"menu_canc_{v_id}"):
+                        if col_canc.button(f"❌ Cancelar Viaje", key=f"menu_canc_{v_id}", use_container_width=True):
                             db.collection(COLECCION_VIAJES).document(v_id).update({
                                 "Estado_Viaje": "Cancelado", 
                                 "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                             })
-                            st.cache_resource.clear() # Limpia la memoria para que desaparezca
+                            st.cache_resource.clear() 
                             st.session_state["alerta_cancelacion"] = {"id": v_id, "destino": v_dest}
                             st.rerun()
-
+                            
     # --- Botones del Menú Principal ---
     st.markdown("---")
     col_menu1, col_menu2 = st.columns(2)
