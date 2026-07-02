@@ -481,7 +481,8 @@ if st.session_state["paso_actual"] == "Menu":
         
         if not df_viajes_activos.empty:
             activos_conductor = df_viajes_activos[
-                (df_viajes_activos["Conductor"] == st.session_state.get("nombre_empleado"))
+                (df_viajes_activos["Conductor"] == st.session_state.get("nombre_empleado")) & 
+                (df_viajes_activos["Estado_Viaje"].isin(["En viaje", "En espera"]))
             ]
             
             if not activos_conductor.empty:
@@ -950,6 +951,24 @@ if st.session_state.get("usuario_actual"):
         df_sb = obtener_viajes_activos_cached()
         
         if not df_sb.empty:
+            
+            # --- BLINDAJE DE MÉTRICAS (Filtra Cancelados y viajes > 24hs) ---
+            rutas_validas = []
+            ahora_radar = datetime.now(TZ_AR)
+            
+            for _, r in df_sb.iterrows():
+                estado_actual = r.get('Estado_Viaje')
+                if estado_actual == "En viaje":
+                    try:
+                        fecha_str = str(r.get('Fecha', ''))
+                        fecha_dt = datetime.strptime(fecha_str, "%d/%m/%Y %H:%M:%S").replace(tzinfo=TZ_AR)
+                        if (ahora_radar - fecha_dt) <= timedelta(hours=24):
+                            rutas_validas.append(r.to_dict())
+                    except Exception:
+                        rutas_validas.append(r.to_dict())
+                        
+            df_r = pd.DataFrame(rutas_validas)
+            
             # PENDIENTES
             if 'Aprobacion' in df_sb.columns and 'Estado_Viaje' in df_sb.columns:
                 df_p = df_sb[
@@ -958,12 +977,6 @@ if st.session_state.get("usuario_actual"):
                 ]
             else: 
                 df_p = pd.DataFrame()
-
-            # EN RUTA
-            if 'Estado_Viaje' in df_sb.columns:
-                df_r = df_sb[df_sb['Estado_Viaje'] == "En viaje"]
-            else: 
-                df_r = pd.DataFrame()
 
             with st.sidebar:
                 st.markdown("---")
@@ -980,7 +993,7 @@ if st.session_state.get("usuario_actual"):
                     st.write("✅ Ninguno.")
                 
                 st.markdown("---")
-                st.write("🚚 **En Ruta:**")
+                st.write("🚚 **En Ruta (Últimas 24h):**")
                 if not df_r.empty: 
                     st.dataframe(df_r[['Conductor', 'Destino']], hide_index=True)
                 else: 
@@ -1010,8 +1023,21 @@ if st.session_state.get("usuario_actual"):
                                 tod_ref = db.collection(COLECCION_VIAJES).stream() 
                                 
                             lista_excel = []
+                            ahora_excel = datetime.now(TZ_AR)
+                            
                             for doc in tod_ref:
-                                lista_excel.append(doc.to_dict())
+                                d = doc.to_dict()
+                                # --- CIERRE POR CONTINGENCIA (24hs) ---
+                                try:
+                                    if str(d.get("Estado_Viaje", "")) in ["En viaje", "En espera"]:
+                                        fecha_creacion = datetime.strptime(str(d.get("Fecha", "")), "%d/%m/%Y %H:%M:%S").replace(tzinfo=TZ_AR)
+                                        if (ahora_excel - fecha_creacion) > timedelta(hours=24):
+                                            d["Estado_Viaje"] = "Finalizado"
+                                            d["Fecha_Fin"] = "CERRADO POR CONTINGENCIA (24h)"
+                                except Exception: 
+                                    pass
+                                    
+                                lista_excel.append(d)
                                 
                             df_ex_full = pd.DataFrame(lista_excel)
                             
@@ -1050,7 +1076,7 @@ if st.session_state.get("usuario_actual"):
                                     hoy_str = datetime.now(TZ_AR).strftime("%d-%m-%Y")
                                     st.download_button("💾 Guardar y Descargar Excel", bx.getvalue(), f"Auditoria_MARBAR_{hoy_str}.xlsx")
                                 else:
-                                    st.warning(f"No hay viajes registrados en la Regional '{filtro_regional}' para esa fecha.")
+                                    st.warning(f"No hay viajes registrados para la fecha seleccionada.")
                             else:
                                 st.warning("No se encontraron viajes con esos parámetros en la base de datos.")
                         except Exception as e_excel:
@@ -1216,7 +1242,9 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
         df_v = obtener_vehiculos_cached()
         if not df_v.empty:
             st.dataframe(df_v, hide_index=True)
-            elim_v = st.selectbox("Borrar Equipo:", [""] + df_v.get("Vehiculo", pd.Series()).tolist())
+            lista_veh_borrar = [""] + df_v["Vehiculo"].tolist()
+            elim_v = st.selectbox("Borrar Equipo:", lista_veh_borrar)
+            
             if st.button("❌ Retirar Unidad") and elim_v: 
                 db.collection("vehiculos").document(elim_v).delete()
                 st.cache_resource.clear()
@@ -1235,7 +1263,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                 return "N/A"
             try: 
                 return pd.to_datetime(val).strftime("%d/%m/%Y")
-            except: 
+            except Exception: 
                 return "N/A"
                 
         arch_u = st.file_uploader("Subir Usuarios (.xlsx/.csv)", type=["xlsx", "csv"])
