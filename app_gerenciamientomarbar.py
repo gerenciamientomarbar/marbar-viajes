@@ -990,14 +990,24 @@ if st.session_state.get("usuario_actual"):
             if st.session_state.get("usuario_actual") in ["ADMIN", "ADMINISTRADOR", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
                 with st.sidebar:
                     st.markdown("---")
-                    st.subheader("📊 Consola Excel (Auditoría Global)")
-                    st.warning("⚠️ Descargar el Excel consume lecturas de base de datos.")
+                    st.subheader("📊 Consola Excel (Auditoría)")
+                    st.warning("⚠️ Descargar el Excel consume lecturas de la base de datos. Utilice los filtros para ahorrar cuota.")
                     
-                    if st.button("📥 Generar Excel Histórico"):
-                        st.info("Compilando base de datos completa...")
+                    # --- FILTROS PREVIOS A LA DESCARGA ---
+                    filtro_regional = st.text_input("Regional específica (dejar vacío para descargar todas):", help="Ej: Oeste, Añelo, Mendoza").strip()
+                    c_mes, c_anio = st.columns(2)
+                    with c_mes: filtro_mes = st.selectbox("Mes:", ["Todos", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"])
+                    with c_anio: filtro_anio = st.selectbox("Año:", ["Todos", "2026", "2027", "2028"])
+                    
+                    if st.button("📥 Generar Excel Histórico", use_container_width=True):
+                        st.info("Buscando viajes en la nube...")
                         try:
-                            # AQUI SÍ PERMITIMOS EL CONSUMO: El usuario pidió explícitamente el Excel
-                            tod_ref = db.collection(COLECCION_VIAJES).stream()
+                            # 1. FILTRO EN FIREBASE (El Francotirador que ahorra lecturas reales)
+                            if filtro_regional != "":
+                                tod_ref = db.collection(COLECCION_VIAJES).where("Regional", "==", filtro_regional).stream()
+                            else:
+                                tod_ref = db.collection(COLECCION_VIAJES).stream() # Si lo deja vacío, baja todo
+                                
                             lista_excel = []
                             for doc in tod_ref:
                                 lista_excel.append(doc.to_dict())
@@ -1005,33 +1015,45 @@ if st.session_state.get("usuario_actual"):
                             df_ex_full = pd.DataFrame(lista_excel)
                             
                             if not df_ex_full.empty:
-                                cols = [
-                                    'ID', 'Regional', 'Fecha', 'Conductor', 'Sector', 'Cargo', 
-                                    'Vehiculo', 'Duracion', 'Salida', 'Alarma Nocturna', 'Origen', 
-                                    'Destino', 'Estado', 'Puntaje', 'Nivel', 'Aprobacion', 
-                                    'Aprobador', 'Fecha_Aprobacion', 'Estado_Viaje', 'Fecha_Fin'
-                                ]
+                                # 2. FILTRO LOCAL DE FECHAS (El filtrado en RAM es gratuito)
+                                if filtro_mes != "Todos" and filtro_anio != "Todos":
+                                    mes_anio_buscado = f"/{filtro_mes}/{filtro_anio}"
+                                    df_ex_full = df_ex_full[df_ex_full['Fecha'].astype(str).str.contains(mes_anio_buscado, na=False)]
+                                elif filtro_mes != "Todos":
+                                    df_ex_full = df_ex_full[df_ex_full['Fecha'].astype(str).str.contains(f"/{filtro_mes}/", na=False)]
+                                elif filtro_anio != "Todos":
+                                    df_ex_full = df_ex_full[df_ex_full['Fecha'].astype(str).str.contains(f"/{filtro_anio} ", na=False)]
                                 
-                                for c in cols: 
-                                    if c not in df_ex_full.columns: 
-                                        df_ex_full[c] = "N/A"
-                                        
-                                df_ex = df_ex_full[cols].sort_values(by="ID", ascending=False).copy()
-                                df_ex['Duracion_Real_Viaje'] = df_ex.apply(
-                                    lambda r: calcular_duracion_real(r.get('Fecha', ''), r.get('Fecha_Fin', '')), 
-                                    axis=1
-                                )
-                                
-                                bx = io.BytesIO()
-                                with pd.ExcelWriter(bx, engine='openpyxl') as wr: 
-                                    df_ex.to_excel(wr, index=False, sheet_name='Auditoria_Viajes')
+                                if not df_ex_full.empty:
+                                    cols = [
+                                        'ID', 'Regional', 'Fecha', 'Conductor', 'Sector', 'Cargo', 
+                                        'Vehiculo', 'Duracion', 'Salida', 'Alarma Nocturna', 'Origen', 
+                                        'Destino', 'Estado', 'Puntaje', 'Nivel', 'Aprobacion', 
+                                        'Aprobador', 'Fecha_Aprobacion', 'Estado_Viaje', 'Fecha_Fin'
+                                    ]
                                     
-                                hoy_str = datetime.now(TZ_AR).strftime("%d-%m-%Y")
-                                st.download_button("💾 Guardar Excel", bx.getvalue(), f"Auditoria_MARBAR_{hoy_str}.xlsx")
+                                    for c in cols: 
+                                        if c not in df_ex_full.columns: 
+                                            df_ex_full[c] = "N/A"
+                                            
+                                    df_ex = df_ex_full[cols].sort_values(by="ID", ascending=False).copy()
+                                    df_ex['Duracion_Real_Viaje'] = df_ex.apply(
+                                        lambda r: calcular_duracion_real(r.get('Fecha', ''), r.get('Fecha_Fin', '')), 
+                                        axis=1
+                                    )
+                                    
+                                    bx = io.BytesIO()
+                                    with pd.ExcelWriter(bx, engine='openpyxl') as wr: 
+                                        df_ex.to_excel(wr, index=False, sheet_name='Auditoria_Viajes')
+                                        
+                                    hoy_str = datetime.now(TZ_AR).strftime("%d-%m-%Y")
+                                    st.download_button("💾 Guardar y Descargar Excel", bx.getvalue(), f"Auditoria_MARBAR_{hoy_str}.xlsx")
+                                else:
+                                    st.warning(f"No hay viajes registrados en la Regional '{filtro_regional}' para esa fecha.")
+                            else:
+                                st.warning("No se encontraron viajes con esos parámetros en la base de datos.")
                         except Exception as e_excel:
                             st.error(f"Error generando archivo: {e_excel}")
-    except Exception as error_sidebar: 
-        print(f"Error en sidebar: {error_sidebar}")
 
 # --- 7. BANDEJA APROBACIONES (SUPERVISIÓN) ---
 rol_bdj = str(st.session_state.get("usuario_actual", "N/A")).strip().upper()
