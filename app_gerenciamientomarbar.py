@@ -95,7 +95,7 @@ db = firestore.client()
 # FUNCIONES DE COMUNICACIÓN OPTIMIZADAS (CACHÉ DE RECURSOS)
 # -----------------------------------------
 
-@st.cache_resource(ttl=300) # Se cambió a cache_resource para evitar que Arrow rompa los diccionarios internos
+@st.cache_resource(ttl=300) 
 def obtener_usuarios_cached():
     try:
         usuarios_ref = db.collection("usuarios").stream()
@@ -104,7 +104,7 @@ def obtener_usuarios_cached():
             lista_usuarios.append(doc.to_dict())
         return pd.DataFrame(lista_usuarios)
     except Exception as e:
-        print(f"Error usuarios: {e}")
+        print(f"Error cargando usuarios: {e}")
         return pd.DataFrame()
 
 @st.cache_resource(ttl=300)
@@ -115,30 +115,36 @@ def obtener_vehiculos_cached():
         for doc in vehiculos_ref:
             lista_vehiculos.append(doc.to_dict())
         
-        if lista_vehiculos:
+        if len(lista_vehiculos) > 0:
             return pd.DataFrame(lista_vehiculos)
         else:
             return pd.DataFrame(columns=["Vehiculo"])
     except Exception as e:
-        print(f"Error vehiculos: {e}")
+        print(f"Error cargando vehiculos: {e}")
         return pd.DataFrame(columns=["Vehiculo"])
 
 @st.cache_resource(ttl=300)
-def obtener_viajes_cached():
+def obtener_viajes_activos_cached():
+    # LECTURA QUIRÚRGICA: Solo descargamos los viajes que están operando AHORA. 
     try:
-        viajes_ref = db.collection(COLECCION_VIAJES).stream()
+        v_espera = db.collection(COLECCION_VIAJES).where("Estado_Viaje", "==", "En espera").stream()
+        v_viaje = db.collection(COLECCION_VIAJES).where("Estado_Viaje", "==", "En viaje").stream()
+        
         lista_viajes = []
-        for doc in viajes_ref:
+        for doc in v_espera:
             lista_viajes.append(doc.to_dict())
+        for doc in v_viaje:
+            lista_viajes.append(doc.to_dict())
+            
         return pd.DataFrame(lista_viajes)
     except Exception as e:
-        print(f"Error viajes: {e}")
+        print(f"Error cargando viajes activos: {e}")
         return pd.DataFrame()
 
 def obtener_siguiente_id():
     try:
         viajes_ref = db.collection(COLECCION_VIAJES).order_by("ID", direction=firestore.Query.DESCENDING).limit(1).get()
-        if viajes_ref:
+        if len(viajes_ref) > 0:
             return viajes_ref[0].to_dict().get("ID", 0) + 1
         else:
             return 1
@@ -147,7 +153,8 @@ def obtener_siguiente_id():
 
 def guardar_en_nube(datos_viaje):
     try:
-        db.collection(COLECCION_VIAJES).document(str(datos_viaje.get("ID", 0))).set(datos_viaje)
+        doc_id = str(datos_viaje.get("ID", 0))
+        db.collection(COLECCION_VIAJES).document(doc_id).set(datos_viaje)
         # Limpiamos la caché para que el nuevo viaje aparezca de inmediato
         st.cache_resource.clear()
         return True
@@ -185,7 +192,13 @@ def generar_ficha_html(v_data):
     if chk_eq and isinstance(chk_eq, dict):
         for k in sorted(chk_eq.keys(), key=ordenar_por_numero):
             v = chk_eq[k]
-            color = "#16a34a" if str(v) == "Sí" else ("#dc2626" if str(v) == "No" else "#64748b")
+            if str(v) == "Sí":
+                color = "#16a34a"
+            elif str(v) == "No":
+                color = "#dc2626"
+            else:
+                color = "#64748b"
+                
             eq_html += f'<tr><td style="padding: 4px; border-bottom: 1px solid #f1f5f9; font-size: 9pt;">{k}</td><td style="text-align: right; font-weight: bold; width: 15%; color: {color};">{str(v).upper()}</td></tr>'
     else:
         eq_html = "<tr><td colspan='2'>Sin datos</td></tr>"
@@ -195,7 +208,13 @@ def generar_ficha_html(v_data):
     if chk_doc and isinstance(chk_doc, dict):
         for k in sorted(chk_doc.keys(), key=ordenar_por_numero):
             v = chk_doc[k]
-            color = "#16a34a" if str(v) == "Sí" else ("#dc2626" if str(v) == "No" else "#64748b")
+            if str(v) == "Sí":
+                color = "#16a34a"
+            elif str(v) == "No":
+                color = "#dc2626"
+            else:
+                color = "#64748b"
+                
             doc_html += f'<tr><td style="padding: 4px; border-bottom: 1px solid #f1f5f9; font-size: 9pt;">{k}</td><td style="text-align: right; font-weight: bold; width: 15%; color: {color};">{str(v).upper()}</td></tr>'
     else:
         doc_html = "<tr><td colspan='2'>Sin datos</td></tr>"
@@ -246,6 +265,7 @@ def generar_ficha_html(v_data):
             <tr><th>Distancia</th><td>{v_data.get('R_Distancia', 'N/A')}</td><th>Clima</th><td>{v_data.get('R_Clima', 'N/A')}</td></tr>
             <tr><th>Pasajeros</th><td>{v_data.get('R_Pasajeros', 'N/A')} ({v_data.get('Detalle_Pasajeros', 'N/A')})</td><th>Camino</th><td>{v_data.get('R_Camino', 'N/A')}</td></tr>
             <tr><th>Sueño +8hs</th><td>{v_data.get('R_Sueno', 'N/A')}</td><th>Horas Servicio</th><td>{v_data.get('R_Horas', 'N/A')}</td></tr>
+            <tr><th>Vehículo Escolta Obligatorio</th><td>{v_data.get('R_Escolta', 'N/A')}</td><th>Cobertura de Señal / MVI</th><td>{v_data.get('R_Com', 'N/A')}</td></tr>
         </table>
 
         <h2>4. CHECKLIST TÉCNICO</h2>
@@ -415,12 +435,17 @@ if st.session_state["paso_actual"] == "Menu":
     # --- SISTEMA DE ALERTAS PERSISTENTES POR WHATSAPP ---
     if "alerta_nuevo_viaje" in st.session_state:
         v_new = st.session_state["alerta_nuevo_viaje"]
-        cabecera_wa = f"🟢 *VIAJE AUTO-APROBADO ID {v_new['id']}*" if v_new['color'] == "green" else f"🔴 *NUEVA SOLICITUD ID {v_new['id']}*"
+        if v_new['color'] == "green":
+            cabecera_wa = f"🟢 *VIAJE AUTO-APROBADO ID {v_new['id']}*"
+        else:
+            cabecera_wa = f"🔴 *NUEVA SOLICITUD ID {v_new['id']}*"
+            
         tkt = f"{cabecera_wa}\n\n🔹 *Conductor:* {v_new['conductor']}\n🔹 *Vehículo:* {v_new['vehiculo']}\n🔹 *Origen:* {v_new['origen']}\n🔹 *Destino:* {v_new['destino']}\n🔹 *Riesgo:* Nivel {v_new['nivel']}"
         link_nuevo_wa = f"https://wa.me/?text={urllib.parse.quote(tkt)}"
         
         st.success(f"✅ ¡Viaje registrado con éxito en el sistema (ID {v_new['id']})!")
         st.markdown(f"### [📱 ENVIAR TICKET DE VIAJE POR WHATSAPP]({link_nuevo_wa})")
+        
         if st.button("Ocultar Alerta de Ticket", key="ocultar_nuevo_viaje"):
             del st.session_state["alerta_nuevo_viaje"]
             st.rerun()
@@ -429,8 +454,10 @@ if st.session_state["paso_actual"] == "Menu":
     if "alerta_llegada" in st.session_state:
         v_llegada = st.session_state["alerta_llegada"]
         msg_llegada_wa = f"✅ *AVISO DE LLEGADA MARBAR*\n\n🔹 *Conductor:* {st.session_state.get('nombre_empleado','')}\n🔹 *Viaje ID:* {v_llegada.get('id','')}\n🔹 *Destino:* {v_llegada.get('destino','')}\n\n👉 *Llegué bien a destino sin novedades.*"
+        
         st.success("El viaje se cerró correctamente en el sistema operativo.")
         st.markdown(f"### [📱 ENVIAR AVISO DE LLEGADA POR WHATSAPP](https://wa.me/?text={urllib.parse.quote(msg_llegada_wa)})")
+        
         if st.button("Ocultar Aviso de Arribo", key="ocultar_llegada"):
             del st.session_state["alerta_llegada"]
             st.rerun()
@@ -439,8 +466,10 @@ if st.session_state["paso_actual"] == "Menu":
     if "alerta_cancelacion" in st.session_state:
         v_canc = st.session_state["alerta_cancelacion"]
         msg_canc_wa = f"❌ *VIAJE CANCELADO - MARBAR*\n\n🔹 *Conductor:* {st.session_state.get('nombre_empleado','')}\n🔹 *Viaje ID:* {v_canc.get('id','')}\n🔹 *Destino:* {v_canc.get('destino','')}\n\n👉 *El viaje ha sido suspendido y cerrado.*"
+        
         st.warning("El viaje fue cancelado y retirado de la ruta activa.")
         st.markdown(f"### [📱 ENVIAR AVISO DE CANCELACIÓN POR WHATSAPP](https://wa.me/?text={urllib.parse.quote(msg_canc_wa)})")
+        
         if st.button("Ocultar Aviso de Cancelación", key="ocultar_canc"):
             del st.session_state["alerta_cancelacion"]
             st.rerun()
@@ -448,11 +477,11 @@ if st.session_state["paso_actual"] == "Menu":
     
     # --- Gestión de Viaje en Curso del Conductor ---
     if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
-        df_viajes_activos = obtener_viajes_cached()
+        df_viajes_activos = obtener_viajes_activos_cached()
+        
         if not df_viajes_activos.empty:
             activos_conductor = df_viajes_activos[
-                (df_viajes_activos["Conductor"] == st.session_state.get("nombre_empleado")) & 
-                (df_viajes_activos["Estado_Viaje"].isin(["En viaje", "En espera"]))
+                (df_viajes_activos["Conductor"] == st.session_state.get("nombre_empleado"))
             ]
             
             if not activos_conductor.empty:
@@ -466,7 +495,6 @@ if st.session_state["paso_actual"] == "Menu":
                         v_veh = str(v.get("Vehiculo", "N/A"))
                         v_niv = str(v.get("Nivel", "1"))
                         
-                        # Mostramos el estado y generamos el Link de WhatsApp permanente
                         if "Aprobado" in estado_aprobacion: 
                             st.success(f"🚀 **VIAJE AUTORIZADO (ID {v_id})**\n\nEl supervisor ya firmó digitalmente. Está habilitado hacia **{v_dest}**.")
                             tkt_wa = f"🟢 *VIAJE EN CURSO ID {v_id}*\n\n🔹 *Conductor:* {st.session_state.get('nombre_empleado')}\n🔹 *Vehículo:* {v_veh}\n🔹 *Origen:* {v_orig}\n🔹 *Destino:* {v_dest}\n🔹 *Estado:* Autorizado"
@@ -496,7 +524,7 @@ if st.session_state["paso_actual"] == "Menu":
                             st.cache_resource.clear() 
                             st.session_state["alerta_cancelacion"] = {"id": v_id, "destino": v_dest}
                             st.rerun()
-                            
+
     # --- Botones del Menú Principal ---
     st.markdown("---")
     col_menu1, col_menu2 = st.columns(2)
@@ -513,7 +541,9 @@ if st.session_state["paso_actual"] == "Menu":
                 for fecha_str in fechas_a_evaluar:
                     if fecha_str and str(fecha_str) != "N/A":
                         try:
-                            if (datetime.strptime(str(fecha_str), "%d/%m/%Y").date() - hoy_dt).days < 0: 
+                            fecha_parseada = datetime.strptime(str(fecha_str), "%d/%m/%Y").date()
+                            dias_diferencia = (fecha_parseada - hoy_dt).days
+                            if dias_diferencia < 0: 
                                 documentacion_vencida = True
                         except Exception: 
                             pass
@@ -532,6 +562,7 @@ if st.session_state["paso_actual"] == "Menu":
 elif st.session_state["paso_actual"] == "Test_Conductor":
     st.warning("⚖️ **DECLARACIÓN JURADA:** La información ingresada reviste carácter de Declaración Jurada.")
     st.subheader("🛡️ Paso 1: Control de Fatiga")
+    
     t1 = st.radio("¿Se siente descansado y en condiciones?", ["Sí", "No"], index=None)
     t2 = st.radio("¿Ha consumido medicamentos que causen somnolencia?", ["No", "Sí"], index=None)
     t3 = st.radio("¿Se encuentra bajo estrés o distracción?", ["No", "Sí"], index=None)
@@ -617,12 +648,20 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     regional_usuario = str(st.session_state.get("regional_empleado", "No asignada"))
     base_usuario = str(st.session_state.get("base_empleado", "No asignada"))
     
-    mapa_autoridad = {"CONDUCTOR": 0, "SUPERVISOR / COORDINADOR / INGENIERO": 1, "JEFE DE SERVICIO": 2, "GERENCIA": 3, "ADMIN": 3, "ADMINISTRADOR": 3}
+    mapa_autoridad = {
+        "CONDUCTOR": 0, 
+        "SUPERVISOR / COORDINADOR / INGENIERO": 1, 
+        "JEFE DE SERVICIO": 2, 
+        "GERENCIA": 3, 
+        "ADMIN": 3, 
+        "ADMINISTRADOR": 3
+    }
     nivel_aprobacion_usuario = mapa_autoridad.get(rol_usuario, 0)
     
     df_flota = obtener_vehiculos_cached()
+    
     if not df_flota.empty:
-        opciones_flota = [""] + df_flota.get("Vehiculo", pd.Series(["⚠️ Cargar flota en Admin"])).tolist()
+        opciones_flota = [""] + df_flota["Vehiculo"].tolist()
     else:
         opciones_flota = ["", "⚠️ Cargar flota en Admin"]
         
@@ -645,10 +684,11 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             for doc_name, doc_date in fechas_vehiculo:
                 if doc_date and doc_date != "N/A":
                     try:
-                        if (datetime.strptime(doc_date, "%d/%m/%Y").date() - hoy_dt).days < 0:
+                        fecha_vencimiento = datetime.strptime(doc_date, "%d/%m/%Y").date()
+                        if (fecha_vencimiento - hoy_dt).days < 0:
                             vehiculo_inhabilitado = True
                             st.error(f"🚨 **UNIDAD INHABILITADA:** {doc_name} vencido.")
-                    except: 
+                    except Exception: 
                         pass
         except Exception: 
             pass
@@ -657,18 +697,27 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
         components.iframe("https://www.google.com/maps/d/u/2/embed?mid=1BPDw99m6vQAC09Kdbw9Onaj5mu-blw4&ehbc=2E312F", height=480)
 
     col1, col2 = st.columns(2)
-    with col1: origen_txt = st.text_input("Origen:")
-    with col2: destino_txt = st.text_input("Destino:")
+    with col1: 
+        origen_txt = st.text_input("Origen:")
+    with col2: 
+        destino_txt = st.text_input("Destino:")
     
     col_dur_h, col_dur_m = st.columns(2)
-    with col_dur_h: dur_horas = st.number_input("Horas (HH):", min_value=0, max_value=72, value=0, step=1)
-    with col_dur_m: dur_minutos = st.number_input("Minutos (MM):", min_value=0, max_value=59, value=0, step=1)
+    with col_dur_h: 
+        dur_horas = st.number_input("Horas (HH):", min_value=0, max_value=72, value=0, step=1)
+    with col_dur_m: 
+        dur_minutos = st.number_input("Minutos (MM):", min_value=0, max_value=59, value=0, step=1)
     
     salida_tipo = st.radio("Salida:", ["Planificada", "Urgencia"], index=None)
     v_distancia = st.radio("Distancia:", ["< 50km", "< 100km", "< 200km", "> 200km"], index=None)
     v_clima = st.selectbox("Clima:", ["Despejado", "Nublado", "Viento", "Lluvia", "Niebla", "Nieve"], index=None)
     v_pasajeros = st.radio("Acompañantes:", ["Con pasajeros", "Solo conductor"], index=None)
-    pasajeros_detalle = st.text_input("👥 Nombres:") if v_pasajeros == "Con pasajeros" else "N/A"
+    
+    if v_pasajeros == "Con pasajeros":
+        pasajeros_detalle = st.text_input("👥 Nombres:") 
+    else:
+        pasajeros_detalle = "N/A"
+        
     v_camino = st.radio("Superficie:", ["Pavimento", "Mixto", "Tierra"], index=None)
     v_sueno = st.radio("¿Descansó +8hs?", ["Sí", "No"], index=None)
     v_horas_servicio = st.radio("Horas Totales:", ["< 12hs", "< 14hs", "< 16hs"], index=None)
@@ -677,35 +726,61 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
     v_comunicacion = st.radio("Cobertura Señal:", ["Total", "Tramos sin señal", "Sin señal"], index=None)
 
     puntos_totales = 0
-    if v_distancia: puntos_totales += {"< 50km":1, "< 100km":2, "< 200km":5, "> 200km":7}.get(v_distancia, 0)
-    if v_clima: puntos_totales += {"Despejado":0, "Nublado":1, "Viento":2, "Lluvia":4, "Niebla":8, "Nieve":9}.get(v_clima, 0)
-    if v_pasajeros: puntos_totales += 1 if v_pasajeros == "Con pasajeros" else 5
-    if v_camino: puntos_totales += {"Pavimento":1, "Mixto":2, "Tierra":4}.get(v_camino, 0)
+    if v_distancia: 
+        puntos_totales += {"< 50km":1, "< 100km":2, "< 200km":5, "> 200km":7}.get(v_distancia, 0)
+    if v_clima: 
+        puntos_totales += {"Despejado":0, "Nublado":1, "Viento":2, "Lluvia":4, "Niebla":8, "Nieve":9}.get(v_clima, 0)
+    if v_pasajeros: 
+        if v_pasajeros == "Con pasajeros":
+            puntos_totales += 1
+        else:
+            puntos_totales += 5
+    if v_camino: 
+        puntos_totales += {"Pavimento":1, "Mixto":2, "Tierra":4}.get(v_camino, 0)
     if v_sueno and v_horas_servicio:
-        if v_horas_servicio == "< 12hs": puntos_totales += 1 if v_sueno == "Sí" else 2
-        elif v_horas_servicio == "< 14hs": puntos_totales += 3 if v_sueno == "Sí" else 5
-        elif v_horas_servicio == "< 16hs": puntos_totales += 6 if v_sueno == "Sí" else 8
-    if v_escolta: puntos_totales += 1 if v_escolta == "No" else 5
-    if v_horario: puntos_totales += 5 if v_horario == "Nocturno" else 1
-    if v_comunicacion: puntos_totales += {"Total":1, "Tramos sin señal":3, "Sin señal":5}.get(v_comunicacion, 0)
+        if v_horas_servicio == "< 12hs": 
+            puntos_totales += 1 if v_sueno == "Sí" else 2
+        elif v_horas_servicio == "< 14hs": 
+            puntos_totales += 3 if v_sueno == "Sí" else 5
+        elif v_horas_servicio == "< 16hs": 
+            puntos_totales += 6 if v_sueno == "Sí" else 8
+    if v_escolta: 
+        if v_escolta == "No":
+            puntos_totales += 1
+        else:
+            puntos_totales += 5
+    if v_horario: 
+        if v_horario == "Nocturno":
+            puntos_totales += 5
+        else:
+            puntos_totales += 1
+    if v_comunicacion: 
+        puntos_totales += {"Total":1, "Tramos sin señal":3, "Sin señal":5}.get(v_comunicacion, 0)
 
     nivel_riesgo_calculado = 1
-    if puntos_totales > 15 and puntos_totales <= 30: nivel_riesgo_calculado = 2
-    elif puntos_totales > 30: nivel_riesgo_calculado = 3
-    if salida_tipo == "Urgencia" and v_horario == "Nocturno": nivel_riesgo_calculado = 3
+    if puntos_totales > 15 and puntos_totales <= 30: 
+        nivel_riesgo_calculado = 2
+    elif puntos_totales > 30: 
+        nivel_riesgo_calculado = 3
+        
+    if salida_tipo == "Urgencia" and v_horario == "Nocturno": 
+        nivel_riesgo_calculado = 3
     
     if nivel_aprobacion_usuario >= nivel_riesgo_calculado:
-        color_semaforo = "green"
+        col_semaforo = "green"
     else:
         if nivel_riesgo_calculado < 3:
-            color_semaforo = "orange"
+            col_semaforo = "orange"
         else:
-            color_semaforo = "red"
+            col_semaforo = "red"
             
-    aprobacion_estado = "AUTORIZADO (Auto-Aprobado)" if color_semaforo == "green" else f"PENDIENTE (Requiere Nivel {nivel_riesgo_calculado})"
+    if col_semaforo == "green":
+        aprobacion_estado = "AUTORIZADO (Auto-Aprobado)"
+    else:
+        aprobacion_estado = f"PENDIENTE (Requiere Nivel {nivel_riesgo_calculado})"
 
     st.subheader("📋 Resultado")
-    if color_semaforo == "green": 
+    if col_semaforo == "green": 
         st.success(f"**{aprobacion_estado}** | {puntos_totales} pts")
     else: 
         st.warning(f"**{aprobacion_estado}** | {puntos_totales} pts")
@@ -739,17 +814,17 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
             ])
             
             if not campos_ok: 
-                if duracion_es_cero:
+                if duracion_es_cero: 
                     st.error("⛔ Ingrese la duración estimada del trayecto.")
-                else:
-                    st.error("⛔ Faltan datos obligatorios. Verifique haber seleccionado una Unidad/Vehículo en la sección superior.")
+                else: 
+                    st.error("⛔ Faltan datos obligatorios o el Vehículo no está seleccionado.")
             elif v_pasajeros == "Con pasajeros" and not pasajeros_detalle.strip(): 
                 st.error("⚠️ Ingrese el nombre de los pasajeros.")
             else:
                 nuevo_id = obtener_siguiente_id()
                 hora_str = datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                 
-                if color_semaforo == "green":
+                if col_semaforo == "green":
                     aprob_db = "🟢 Aprobado"
                     aprobador_db = nombre_conductor
                     fecha_aprob_db = hora_str
@@ -803,43 +878,67 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
                         "origen": origen_txt,
                         "destino": destino_txt,
                         "nivel": nivel_riesgo_calculado,
-                        "color": color_semaforo
+                        "color": col_semaforo
                     }
                     st.session_state["paso_actual"] = "Menu"
                     st.rerun()
 
 elif st.session_state["paso_actual"] == "Historial":
-    st.subheader("📜 Historial de Registros")
-    df_h = obtener_viajes_cached()
-    
-    if not df_h.empty:
-        if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]: 
-            df_h = df_h[df_h["Conductor"] == st.session_state.get("nombre_empleado")]
+    st.subheader("📜 Historial Completo de Registros")
+    # AQUI SÍ PERMITIMOS EL CONSUMO: El usuario pidió explícitamente ver el historial
+    st.info("Descargando base de datos histórica...")
+    try:
+        # LECTURA CON FRANCOTIRADOR: Solo descargamos lo estrictamente necesario
+        if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
+            # Si es chofer, Firebase SOLO lee sus propios viajes
+            hist_ref = db.collection(COLECCION_VIAJES).where("Conductor", "==", st.session_state.get("nombre_empleado")).stream()
+        else:
+            # Si es Admin, sí baja todo
+            hist_ref = db.collection(COLECCION_VIAJES).stream()
             
+        lista_historial = []
+        for doc in hist_ref:
+            lista_historial.append(doc.to_dict())
+            
+        df_h = pd.DataFrame(lista_historial)
+        
         if not df_h.empty:
             df_h = df_h.sort_values(by="ID", ascending=False)
             st.dataframe(df_h[['ID', 'Fecha', 'Origen', 'Destino', 'Estado_Viaje']], hide_index=True)
             
-            op_dd = [""] + [f"{r.get('ID','')} - {r.get('Conductor','')} - {str(r.get('Fecha',''))[:10]}" for _, r in df_h.iterrows()]
-            v_sel = st.selectbox("Seleccione viaje:", op_dd)
+            lista_desplegable = [""]
+            for _, r in df_h.iterrows():
+                lista_desplegable.append(f"{r.get('ID','')} - {str(r.get('Fecha',''))[:10]}")
+                
+            v_sel = st.selectbox("Seleccione viaje:", lista_desplegable)
             
             if v_sel != "":
                 id_ext = str(v_sel.split(" - ")[0])
                 d_v = df_h[df_h["ID"].astype(str) == id_ext].iloc[0]
-                st.download_button("📥 Descargar Ficha PDF", generar_ficha_html(d_v), f"Auditoria_{id_ext}.html", mime="text/html")
+                st.download_button(
+                    "📥 Descargar Ficha PDF", 
+                    generar_ficha_html(d_v), 
+                    f"Auditoria_{id_ext}.html", 
+                    mime="text/html"
+                )
+        else:
+            st.write("No tiene viajes registrados en su historial.")
+    except Exception as e:
+        st.error(f"Error cargando historial: {e}")
     
-    if st.button("⬅️ Menú"): 
+    if st.button("⬅️ Menú Principal"): 
         st.session_state["paso_actual"] = "Menu"
         st.rerun()
 
-# --- 6. SIDEBAR (PANEL LATERAL) ---
+# --- 6. SIDEBAR (PANEL LATERAL: RADAR DE ALTA EFICIENCIA) ---
 if st.session_state.get("usuario_actual"):
     with st.sidebar:
         if os.path.exists("logo.png"): 
             st.image("logo.png", use_column_width=True)
+            
         st.header("📊 SSA & Logística")
         
-        if st.button("🔄 Actualizar", use_container_width=True): 
+        if st.button("🔄 Actualizar Radar", use_container_width=True): 
             st.cache_resource.clear()
             st.rerun()
             
@@ -848,54 +947,38 @@ if st.session_state.get("usuario_actual"):
             st.rerun()
 
     try:
-        df_sb = obtener_viajes_cached()
+        # Solo descargamos los viajes activos, salvando la cuota de Firebase
+        df_sb = obtener_viajes_activos_cached()
         
         if not df_sb.empty:
-            hoy = datetime.now(TZ_AR).strftime("%d/%m/%Y")
-            mes_actual = datetime.now(TZ_AR).strftime("/%m/%Y")
-            
-            # --- BLINDAJE DE MÉTRICAS (EXCLUYE CANCELADOS) ---
-            df_activos_reales = df_sb[df_sb.get('Estado_Viaje', pd.Series()) != "Cancelado"]
-            
-            if 'Fecha' in df_activos_reales.columns:
-                df_hoy = df_activos_reales[df_activos_reales['Fecha'].astype(str).str.contains(hoy, na=False)]
-                df_mes = df_activos_reales[df_activos_reales['Fecha'].astype(str).str.contains(mes_actual, na=False)]
-            else:
-                df_hoy = pd.DataFrame()
-                df_mes = pd.DataFrame()
-
-            # PENDIENTES REALES
-            if 'Aprobacion' in df_hoy.columns and 'Estado_Viaje' in df_hoy.columns:
-                df_p = df_hoy[
-                    (df_hoy['Aprobacion'].astype(str).str.contains("Pendiente", na=False)) & 
-                    (df_hoy['Estado_Viaje'] == "En espera")
+            # PENDIENTES
+            if 'Aprobacion' in df_sb.columns and 'Estado_Viaje' in df_sb.columns:
+                df_p = df_sb[
+                    (df_sb['Aprobacion'].astype(str).str.contains("Pendiente", na=False)) & 
+                    (df_sb['Estado_Viaje'] == "En espera")
                 ]
-            else:
+            else: 
                 df_p = pd.DataFrame()
 
-            # EN RUTA REALES
+            # EN RUTA
             if 'Estado_Viaje' in df_sb.columns:
                 df_r = df_sb[df_sb['Estado_Viaje'] == "En viaje"]
-            else:
+            else: 
                 df_r = pd.DataFrame()
 
             with st.sidebar:
                 st.markdown("---")
-                st.subheader("📈 Resumen Global Operativo")
-                col_m1, col_m2 = st.columns(2)
-                col_m1.metric("Viajes Hoy", str(len(df_hoy)), delta=f"{len(df_p)} pend." if not df_p.empty else "Al día", delta_color="inverse" if not df_p.empty else "normal")
-                col_m2.metric("En Ruta", str(len(df_r)))
-                
-                col_m3, col_m4 = st.columns(2)
-                col_m3.metric("Este Mes", str(len(df_mes)))
-                col_m4.metric("Histórico", str(len(df_sb)))
+                st.subheader("📈 Radar Operativo")
+                c_m1, c_m2 = st.columns(2)
+                c_m1.metric("Pendientes", str(len(df_p)))
+                c_m2.metric("En Ruta", str(len(df_r)))
                 
                 st.markdown("---")
-                st.write("⚠️ **Pendientes (Hoy):**")
+                st.write("⚠️ **Esperando Validación:**")
                 if not df_p.empty: 
                     st.dataframe(df_p[['Conductor', 'Destino']], hide_index=True)
                 else: 
-                    st.write("✅ Al día.")
+                    st.write("✅ Ninguno.")
                 
                 st.markdown("---")
                 st.write("🚚 **En Ruta:**")
@@ -904,36 +987,49 @@ if st.session_state.get("usuario_actual"):
                 else: 
                     st.write("✅ Ninguna.")
 
-                st.markdown("---")
-                st.subheader("📜 Ficha Rápida")
-                if "ID" in df_sb.columns and "Conductor" in df_sb.columns:
-                    df_sb_ord = df_sb.sort_values(by="ID", ascending=False)
-                    op_sb = [""] + [f"{r.get('ID','')} - {r.get('Conductor','')}" for _, r in df_sb_ord.iterrows()]
-                    v_sb = st.selectbox("Buscar ID:", op_sb)
-                    
-                    if v_sb != "":
-                        id_sb = str(v_sb.split(" - ")[0])
-                        d_sb = df_sb[df_sb["ID"].astype(str) == id_sb].iloc[0]
-                        st.download_button("📥 Descargar Ficha", generar_ficha_html(d_sb), f"Auditoria_{id_sb}.html", mime="text/html")
-
             if st.session_state.get("usuario_actual") in ["ADMIN", "ADMINISTRADOR", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
                 with st.sidebar:
                     st.markdown("---")
-                    st.subheader("📊 Consola Excel")
+                    st.subheader("📊 Consola Excel (Auditoría Global)")
+                    st.warning("⚠️ Descargar el Excel consume lecturas de base de datos.")
                     
-                    cols = ['ID', 'Regional', 'Fecha', 'Conductor', 'Sector', 'Cargo', 'Vehiculo', 'Duracion', 'Salida', 'Alarma Nocturna', 'Origen', 'Destino', 'Estado', 'Puntaje', 'Nivel', 'Aprobacion', 'Aprobador', 'Fecha_Aprobacion', 'Estado_Viaje', 'Fecha_Fin']
-                    for c in cols: 
-                        if c not in df_sb.columns: 
-                            df_sb[c] = "N/A"
+                    if st.button("📥 Generar Excel Histórico"):
+                        st.info("Compilando base de datos completa...")
+                        try:
+                            # AQUI SÍ PERMITIMOS EL CONSUMO: El usuario pidió explícitamente el Excel
+                            tod_ref = db.collection(COLECCION_VIAJES).stream()
+                            lista_excel = []
+                            for doc in tod_ref:
+                                lista_excel.append(doc.to_dict())
+                                
+                            df_ex_full = pd.DataFrame(lista_excel)
                             
-                    df_ex = df_sb[cols].sort_values(by="ID", ascending=False).copy()
-                    df_ex['Duracion_Real_Viaje'] = df_ex.apply(lambda r: calcular_duracion_real(r.get('Fecha', ''), r.get('Fecha_Fin', '')), axis=1)
-                    
-                    bx = io.BytesIO()
-                    with pd.ExcelWriter(bx, engine='openpyxl') as wr: 
-                        df_ex.to_excel(wr, index=False, sheet_name='Auditoria_Viajes')
-                        
-                    st.download_button("📥 Auditoría (Excel)", bx.getvalue(), f"Auditoria_{hoy.replace('/','-')}.xlsx")
+                            if not df_ex_full.empty:
+                                cols = [
+                                    'ID', 'Regional', 'Fecha', 'Conductor', 'Sector', 'Cargo', 
+                                    'Vehiculo', 'Duracion', 'Salida', 'Alarma Nocturna', 'Origen', 
+                                    'Destino', 'Estado', 'Puntaje', 'Nivel', 'Aprobacion', 
+                                    'Aprobador', 'Fecha_Aprobacion', 'Estado_Viaje', 'Fecha_Fin'
+                                ]
+                                
+                                for c in cols: 
+                                    if c not in df_ex_full.columns: 
+                                        df_ex_full[c] = "N/A"
+                                        
+                                df_ex = df_ex_full[cols].sort_values(by="ID", ascending=False).copy()
+                                df_ex['Duracion_Real_Viaje'] = df_ex.apply(
+                                    lambda r: calcular_duracion_real(r.get('Fecha', ''), r.get('Fecha_Fin', '')), 
+                                    axis=1
+                                )
+                                
+                                bx = io.BytesIO()
+                                with pd.ExcelWriter(bx, engine='openpyxl') as wr: 
+                                    df_ex.to_excel(wr, index=False, sheet_name='Auditoria_Viajes')
+                                    
+                                hoy_str = datetime.now(TZ_AR).strftime("%d-%m-%Y")
+                                st.download_button("💾 Guardar Excel", bx.getvalue(), f"Auditoria_MARBAR_{hoy_str}.xlsx")
+                        except Exception as e_excel:
+                            st.error(f"Error generando archivo: {e_excel}")
     except Exception as error_sidebar: 
         print(f"Error en sidebar: {error_sidebar}")
 
@@ -944,7 +1040,13 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR", "SUPERVISOR / COORDINADOR / INGENIERO",
     st.markdown("---")
     st.title("📥 Bandeja de Validaciones")
     
-    mapa_autoridad_bdj = {"SUPERVISOR / COORDINADOR / INGENIERO": 1, "JEFE DE SERVICIO": 2, "GERENCIA": 3, "ADMIN": 3, "ADMINISTRADOR": 3}
+    mapa_autoridad_bdj = {
+        "SUPERVISOR / COORDINADOR / INGENIERO": 1, 
+        "JEFE DE SERVICIO": 2, 
+        "GERENCIA": 3, 
+        "ADMIN": 3, 
+        "ADMINISTRADOR": 3
+    }
     mi_nivel = mapa_autoridad_bdj.get(rol_bdj, 0)
     
     mi_reg = str(st.session_state.get("regional_empleado", "")).strip().lower()
@@ -952,11 +1054,12 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR", "SUPERVISOR / COORDINADOR / INGENIERO",
     es_jefe_global = rol_bdj in ["ADMIN", "ADMINISTRADOR", "GERENCIA"]
     
     try:
-        df_tod = obtener_viajes_cached()
+        # Usamos el radar eficiente. No descargamos los cancelados o finalizados.
+        df_tod = obtener_viajes_activos_cached()
         if not df_tod.empty:
             df_pen = df_tod[
-                (df_tod.get('Aprobacion', pd.Series()).astype(str).str.contains("Pendiente", na=False)) & 
-                (df_tod.get('Estado_Viaje', pd.Series()) == "En espera")
+                (df_tod['Aprobacion'].astype(str).str.contains("Pendiente", na=False)) & 
+                (df_tod['Estado_Viaje'] == "En espera")
             ]
             
             p_list = []
@@ -965,11 +1068,10 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR", "SUPERVISOR / COORDINADOR / INGENIERO",
                 v_reg = str(v_dict.get("Regional", "")).strip().lower()
                 v_sec = str(v_dict.get("Sector", "")).strip().lower()
                 
-                # Filtro estricto
                 if es_jefe_global or (v_reg == mi_reg and v_sec == mi_sec): 
                     p_list.append(v_dict)
             
-            if p_list:
+            if len(p_list) > 0:
                 for v_p in p_list:
                     n_v = int(v_p.get("Nivel", 1))
                     v_id = str(v_p.get("ID", "0"))
@@ -991,6 +1093,8 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR", "SUPERVISOR / COORDINADOR / INGENIERO",
                             st.error(f"🔒 Nivel {mi_nivel} insuficiente. Exige Nivel {n_v}.")
             else: 
                 st.info("✅ Bandeja limpia. No hay solicitudes pendientes para su sector.")
+        else: 
+            st.info("✅ Bandeja limpia.")
     except Exception: 
         pass
 
@@ -1059,8 +1163,12 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
         df_u = obtener_usuarios_cached()
         if not df_u.empty:
             st.dataframe(df_u, hide_index=True)
-            lista_b = [""] + [str(r.get("DNI_Usuario", "")) for _, r in df_u.iterrows() if str(r.get("Rol", "")) not in ["ADMIN", "ADMINISTRADOR"]]
-            elim_u = st.selectbox("Borrar Perfil (DNI):", lista_b)
+            lista_borrar = [""]
+            for _, r in df_u.iterrows():
+                if str(r.get("Rol", "")) not in ["ADMIN", "ADMINISTRADOR"]:
+                    lista_borrar.append(str(r.get("DNI_Usuario", "")))
+                    
+            elim_u = st.selectbox("Borrar Perfil (DNI):", lista_borrar)
             
             if st.button("❌ Dar de Baja") and elim_u: 
                 db.collection("usuarios").document(elim_u).delete()
@@ -1087,7 +1195,9 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
         df_v = obtener_vehiculos_cached()
         if not df_v.empty:
             st.dataframe(df_v, hide_index=True)
-            elim_v = st.selectbox("Borrar Equipo:", [""] + df_v.get("Vehiculo", pd.Series()).tolist())
+            lista_veh_borrar = [""] + df_v["Vehiculo"].tolist()
+            elim_v = st.selectbox("Borrar Equipo:", lista_veh_borrar)
+            
             if st.button("❌ Retirar Unidad") and elim_v: 
                 db.collection("vehiculos").document(elim_v).delete()
                 st.cache_resource.clear()
@@ -1106,7 +1216,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                 return "N/A"
             try: 
                 return pd.to_datetime(val).strftime("%d/%m/%Y")
-            except: 
+            except Exception: 
                 return "N/A"
                 
         arch_u = st.file_uploader("Subir Usuarios (.xlsx/.csv)", type=["xlsx", "csv"])
@@ -1128,13 +1238,17 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                 
                 if st.button("🚀 Procesar Usuarios"):
                     br_u = st.progress(0)
-                    t_u, proc_u = len(df_m), 0
+                    t_u = len(df_m)
+                    proc_u = 0
                     
                     for i, r in df_m.iterrows():
                         d_str = str(r.get("DNI_USUARIO", r.get("DNI", ""))).replace(".0", "").strip()
                         
                         if d_str and d_str.lower() not in ["nan", "nat", "n/a", "none", "null", ""]:
-                            e_str = str(r.get("EMAIL", "")).strip().lower() or f"{d_str}@marbar.com"
+                            e_str = str(r.get("EMAIL", "")).strip().lower()
+                            if not e_str:
+                                e_str = f"{d_str}@marbar.com"
+                                
                             rol_ex = str(r.get("ROL", "")).strip().upper()
                             r_of = "Conductor"
                             
@@ -1148,7 +1262,8 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                                 r_of = "ADMIN"
                                 
                             try: 
-                                auth.create_user(email=e_str, password=''.join(random.choices(string.ascii_letters + string.digits, k=16)))
+                                pass_temp = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+                                auth.create_user(email=e_str, password=pass_temp)
                             except Exception: 
                                 pass 
                                 
@@ -1158,19 +1273,32 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                                 except Exception: 
                                     pass
                                     
+                            nombre_usr = str(r.get("NOMBRE", "")).strip()
+                            if not nombre_usr: nombre_usr = "Sin Nombre"
+                            
+                            reg_usr = str(r.get("REGIONAL", "")).strip()
+                            if not reg_usr: reg_usr = "N/A"
+                            
+                            base_usr = str(r.get("BASE", "")).strip()
+                            if not base_usr: base_usr = "N/A"
+                            
+                            sec_usr = str(r.get("SECTOR", "")).strip()
+                            if not sec_usr: sec_usr = "N/A"
+
                             db.collection("usuarios").document(d_str).set({
                                 "DNI_Usuario": d_str, 
-                                "Nombre": str(r.get("NOMBRE", "")).strip() or "Sin Nombre", 
+                                "Nombre": nombre_usr, 
                                 "Email": e_str, 
-                                "Regional": str(r.get("REGIONAL", "")).strip() or "N/A", 
-                                "Base": str(r.get("BASE", "")).strip() or "N/A", 
+                                "Regional": reg_usr, 
+                                "Base": base_usr, 
                                 "Rol": r_of, 
-                                "Sector": str(r.get("SECTOR", "")).strip() or "N/A", 
+                                "Sector": sec_usr, 
                                 "Venc_Licencia": str(r.get("VENC_LICENCIA", "N/A")), 
                                 "Venc_Defensiva": str(r.get("VENC_DEFENSIVA", "N/A")), 
                                 "Venc_Def_Chile": str(r.get("VENC_DEF_CHILE", "N/A"))
                             })
                             proc_u += 1
+                            
                         br_u.progress((i + 1) / t_u)
                         
                     st.cache_resource.clear()
@@ -1198,7 +1326,8 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                 
                 if st.button("🚀 Procesar Vehículos"):
                     br_v = st.progress(0)
-                    t_v, p_v = len(df_mv), 0
+                    t_v = len(df_mv)
+                    p_v = 0
                     
                     for i, r in df_mv.iterrows():
                         v_str = str(r.get("VEHICULO", "")).strip()
@@ -1209,6 +1338,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                                 "Venc_SEGURO": str(r.get("VENC_SEGURO", "N/A"))
                             })
                             p_v += 1
+                            
                         br_v.progress((i + 1) / t_v)
                         
                     st.cache_resource.clear()
