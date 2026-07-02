@@ -885,8 +885,7 @@ elif st.session_state["paso_actual"] == "Formulario_Viaje":
 
 elif st.session_state["paso_actual"] == "Historial":
     st.subheader("📜 Historial Completo de Registros")
-    # AQUI SÍ PERMITIMOS EL CONSUMO: El usuario pidió explícitamente ver el historial
-    st.info("Descargando base de datos histórica...")
+    st.info("Descargando su base de datos histórica...")
     try:
         # LECTURA CON FRANCOTIRADOR: Solo descargamos lo estrictamente necesario
         if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
@@ -994,10 +993,12 @@ if st.session_state.get("usuario_actual"):
                     st.warning("⚠️ Descargar el Excel consume lecturas de la base de datos. Utilice los filtros para ahorrar cuota.")
                     
                     # --- FILTROS PREVIOS A LA DESCARGA ---
-                    filtro_regional = st.text_input("Regional específica (dejar vacío para descargar todas):", help="Ej: Oeste, Añelo, Mendoza").strip()
+                    filtro_regional = st.text_input("Regional específica (dejar vacío para todas):", help="Ej: Oeste, Añelo, Mendoza").strip()
                     c_mes, c_anio = st.columns(2)
-                    with c_mes: filtro_mes = st.selectbox("Mes:", ["Todos", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"])
-                    with c_anio: filtro_anio = st.selectbox("Año:", ["Todos", "2026", "2027", "2028"])
+                    with c_mes: 
+                        filtro_mes = st.selectbox("Mes:", ["Todos", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"])
+                    with c_anio: 
+                        filtro_anio = st.selectbox("Año:", ["Todos", "2024", "2025", "2026", "2027", "2028"])
                     
                     if st.button("📥 Generar Excel Histórico", use_container_width=True):
                         st.info("Buscando viajes en la nube...")
@@ -1006,7 +1007,7 @@ if st.session_state.get("usuario_actual"):
                             if filtro_regional != "":
                                 tod_ref = db.collection(COLECCION_VIAJES).where("Regional", "==", filtro_regional).stream()
                             else:
-                                tod_ref = db.collection(COLECCION_VIAJES).stream() # Si lo deja vacío, baja todo
+                                tod_ref = db.collection(COLECCION_VIAJES).stream() 
                                 
                             lista_excel = []
                             for doc in tod_ref:
@@ -1054,6 +1055,8 @@ if st.session_state.get("usuario_actual"):
                                 st.warning("No se encontraron viajes con esos parámetros en la base de datos.")
                         except Exception as e_excel:
                             st.error(f"Error generando archivo: {e_excel}")
+    except Exception as error_sidebar: 
+        print(f"Error en sidebar: {error_sidebar}")
 
 # --- 7. BANDEJA APROBACIONES (SUPERVISIÓN) ---
 rol_bdj = str(st.session_state.get("usuario_actual", "N/A")).strip().upper()
@@ -1185,12 +1188,8 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
         df_u = obtener_usuarios_cached()
         if not df_u.empty:
             st.dataframe(df_u, hide_index=True)
-            lista_borrar = [""]
-            for _, r in df_u.iterrows():
-                if str(r.get("Rol", "")) not in ["ADMIN", "ADMINISTRADOR"]:
-                    lista_borrar.append(str(r.get("DNI_Usuario", "")))
-                    
-            elim_u = st.selectbox("Borrar Perfil (DNI):", lista_borrar)
+            lista_b = [""] + [str(r.get("DNI_Usuario", "")) for _, r in df_u.iterrows() if str(r.get("Rol", "")) not in ["ADMIN", "ADMINISTRADOR"]]
+            elim_u = st.selectbox("Borrar Perfil (DNI):", lista_b)
             
             if st.button("❌ Dar de Baja") and elim_u: 
                 db.collection("usuarios").document(elim_u).delete()
@@ -1217,9 +1216,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
         df_v = obtener_vehiculos_cached()
         if not df_v.empty:
             st.dataframe(df_v, hide_index=True)
-            lista_veh_borrar = [""] + df_v["Vehiculo"].tolist()
-            elim_v = st.selectbox("Borrar Equipo:", lista_veh_borrar)
-            
+            elim_v = st.selectbox("Borrar Equipo:", [""] + df_v.get("Vehiculo", pd.Series()).tolist())
             if st.button("❌ Retirar Unidad") and elim_v: 
                 db.collection("vehiculos").document(elim_v).delete()
                 st.cache_resource.clear()
@@ -1238,7 +1235,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                 return "N/A"
             try: 
                 return pd.to_datetime(val).strftime("%d/%m/%Y")
-            except Exception: 
+            except: 
                 return "N/A"
                 
         arch_u = st.file_uploader("Subir Usuarios (.xlsx/.csv)", type=["xlsx", "csv"])
