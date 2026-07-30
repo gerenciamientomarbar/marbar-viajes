@@ -39,9 +39,7 @@ text_color = "#1F2937"
 
 st.markdown(f"""
 <style>
-    /* Ocultar elementos por defecto de Streamlit para un look corporativo */
     footer {{visibility: hidden;}}
-    
     .stApp {{ 
         background-color: #F3F4F6; 
     }}
@@ -125,7 +123,6 @@ def obtener_vehiculos_cached():
 
 @st.cache_resource(ttl=300)
 def obtener_viajes_activos_cached():
-    # LECTURA QUIRÚRGICA: Solo descargamos los viajes que están operando AHORA. 
     try:
         v_espera = db.collection(COLECCION_VIAJES).where("Estado_Viaje", "==", "En espera").stream()
         v_viaje = db.collection(COLECCION_VIAJES).where("Estado_Viaje", "==", "En viaje").stream()
@@ -155,7 +152,6 @@ def guardar_en_nube(datos_viaje):
     try:
         doc_id = str(datos_viaje.get("ID", 0))
         db.collection(COLECCION_VIAJES).document(doc_id).set(datos_viaje)
-        # Limpiamos la caché para que el nuevo viaje aparezca de inmediato
         st.cache_resource.clear()
         return True
     except Exception:
@@ -382,12 +378,11 @@ if st.session_state["usuario_actual"] is None:
         
         if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
             if correo_configurar != "":
-                # Intentamos forzar la creación de la cuenta en Firebase Auth por si no existe
                 try:
                     pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                     auth.create_user(email=correo_configurar, password=pass_temporal)
                 except Exception: 
-                    pass # Ignoramos el error si la cuenta ya existía
+                    pass
                     
                 url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY.strip()}"
                 try:
@@ -401,7 +396,6 @@ if st.session_state["usuario_actual"] is None:
             else: 
                 st.error("Escriba un correo válido.")
     
-    # Detenemos la ejecución si el usuario no ha iniciado sesión
     st.stop() 
 
 # --- WORKFLOW PRINCIPAL ---
@@ -475,14 +469,74 @@ if st.session_state["paso_actual"] == "Menu":
             st.rerun()
         st.markdown("---")
     
+    # --- MÓDULO EXCLUSIVO DE CONTROL DOCUMENTAL ---
+    if st.session_state.get("usuario_actual") in ["Control Documental", "ADMIN", "ADMINISTRADOR"]:
+        with st.expander("📋 MÓDULO DE GESTIÓN Y EDICIÓN DOCUMENTAL", expanded=(st.session_state.get("usuario_actual") == "Control Documental")):
+            st.info("💡 Este panel permite actualizar vencimientos de habilitaciones sin alterar el registro histórico de viajes.")
+            tab_doc_u, tab_doc_v = st.tabs(["👥 Habilitaciones de Personal", "🚘 Habilitaciones de Flota"])
+            
+            with tab_doc_u:
+                df_usr_doc = obtener_usuarios_cached()
+                if not df_usr_doc.empty:
+                    st.dataframe(df_usr_doc[['DNI_Usuario', 'Nombre', 'Email', 'Venc_Licencia', 'Venc_Defensiva', 'Venc_Def_Chile']], hide_index=True)
+                    
+                    opciones_usr = [""] + [f"{r.get('DNI_Usuario','')} - {r.get('Nombre','')}" for _, r in df_usr_doc.iterrows()]
+                    usr_sel_edit = st.selectbox("Seleccionar Operador a actualizar:", opciones_usr, key="edit_usr_sel")
+                    
+                    if usr_sel_edit != "":
+                        dni_edit = str(usr_sel_edit.split(" - ")[0])
+                        usr_datos = df_usr_doc[df_usr_doc['DNI_Usuario'].astype(str) == dni_edit].iloc[0]
+                        
+                        col_ed1, col_ed2, col_ed3 = st.columns(3)
+                        with col_ed1:
+                            new_lic = st.date_input("Nuevo Venc. Carnet:", value=datetime.now(TZ_AR).date(), key="ed_lic")
+                        with col_ed2:
+                            new_def = st.date_input("Nuevo Venc. Defensiva:", value=datetime.now(TZ_AR).date(), key="ed_def")
+                        with col_ed3:
+                            new_chile = st.date_input("Nuevo Venc. Defensiva Chile:", value=datetime.now(TZ_AR).date(), key="ed_chile")
+                            
+                        if st.button("💾 Actualizar Fechas del Operador", key="btn_save_usr_doc"):
+                            db.collection("usuarios").document(dni_edit).update({
+                                "Venc_Licencia": new_lic.strftime("%d/%m/%Y"),
+                                "Venc_Defensiva": new_def.strftime("%d/%m/%Y"),
+                                "Venc_Def_Chile": new_chile.strftime("%d/%m/%Y")
+                            })
+                            st.cache_resource.clear()
+                            st.success(f"✅ Vencimientos de {usr_datos.get('Nombre')} actualizados correctamente.")
+                            st.rerun()
+
+            with tab_doc_v:
+                df_veh_doc = obtener_vehiculos_cached()
+                if not df_veh_doc.empty:
+                    st.dataframe(df_veh_doc[['Vehiculo', 'Venc_VTV', 'Venc_Seguro']], hide_index=True)
+                    
+                    opciones_veh = [""] + df_veh_doc['Vehiculo'].tolist()
+                    veh_sel_edit = st.selectbox("Seleccionar Unidad a actualizar:", opciones_veh, key="edit_veh_sel")
+                    
+                    if veh_sel_edit != "":
+                        v_datos = df_veh_doc[df_veh_doc['Vehiculo'] == veh_sel_edit].iloc[0]
+                        col_v1, col_v2 = st.columns(2)
+                        with col_v1:
+                            new_vtv = st.date_input("Nuevo Venc. VTV:", value=datetime.now(TZ_AR).date(), key="ed_vtv")
+                        with col_v2:
+                            new_seg = st.date_input("Nuevo Venc. Seguro:", value=datetime.now(TZ_AR).date(), key="ed_seg")
+                            
+                        if st.button("💾 Actualizar Fechas de la Unidad", key="btn_save_veh_doc"):
+                            db.collection("vehiculos").document(veh_sel_edit).update({
+                                "Venc_VTV": new_vtv.strftime("%d/%m/%Y"),
+                                "Venc_Seguro": new_seg.strftime("%d/%m/%Y")
+                            })
+                            st.cache_resource.clear()
+                            st.success(f"✅ Documentación de la patente {veh_sel_edit} actualizada correctamente.")
+                            st.rerun()
+
     # --- Gestión de Viaje en Curso del Conductor ---
-    if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
+    if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR", "Control Documental"]:
         df_viajes_activos = obtener_viajes_activos_cached()
         
         if not df_viajes_activos.empty:
             activos_conductor = df_viajes_activos[
-                (df_viajes_activos["Conductor"] == st.session_state.get("nombre_empleado")) & 
-                (df_viajes_activos["Estado_Viaje"].isin(["En viaje", "En espera"]))
+                (df_viajes_activos["Conductor"] == st.session_state.get("nombre_empleado"))
             ]
             
             if not activos_conductor.empty:
@@ -530,30 +584,33 @@ if st.session_state["paso_actual"] == "Menu":
     st.markdown("---")
     col_menu1, col_menu2 = st.columns(2)
     with col_menu1:
-        if st.button("🚀 NUEVO GERENCIAMIENTO DE VIAJE", use_container_width=True): 
-            documentacion_vencida = False
-            if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
-                hoy_dt = datetime.now(TZ_AR).date()
-                fechas_a_evaluar = [
-                    st.session_state.get("venc_licencia"), 
-                    st.session_state.get("venc_defensiva"), 
-                    st.session_state.get("venc_def_chile")
-                ]
-                for fecha_str in fechas_a_evaluar:
-                    if fecha_str and str(fecha_str) != "N/A":
-                        try:
-                            fecha_parseada = datetime.strptime(str(fecha_str), "%d/%m/%Y").date()
-                            dias_diferencia = (fecha_parseada - hoy_dt).days
-                            if dias_diferencia < 0: 
-                                documentacion_vencida = True
-                        except Exception: 
-                            pass
-                            
-            if documentacion_vencida: 
-                st.error("⛔ **ACCESO DENEGADO:** Tiene documentación habilitante vencida. Regularice su situación.")
-            else:
-                st.session_state["paso_actual"] = "Test_Conductor"
-                st.rerun()
+        if st.session_state.get("usuario_actual") == "Control Documental":
+            st.info("🔒 Perfil asignado a Control Documental (Gestión exclusiva de vencimientos).")
+        else:
+            if st.button("🚀 NUEVO GERENCIAMIENTO DE VIAJE", use_container_width=True): 
+                documentacion_vencida = False
+                if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
+                    hoy_dt = datetime.now(TZ_AR).date()
+                    fechas_a_evaluar = [
+                        st.session_state.get("venc_licencia"), 
+                        st.session_state.get("venc_defensiva"), 
+                        st.session_state.get("venc_def_chile")
+                    ]
+                    for fecha_str in fechas_a_evaluar:
+                        if fecha_str and str(fecha_str) != "N/A":
+                            try:
+                                fecha_parseada = datetime.strptime(str(fecha_str), "%d/%m/%Y").date()
+                                dias_diferencia = (fecha_parseada - hoy_dt).days
+                                if dias_diferencia < 0: 
+                                    documentacion_vencida = True
+                            except Exception: 
+                                pass
+                                
+                if documentacion_vencida: 
+                    st.error("⛔ **ACCESO DENEGADO:** Tiene documentación habilitante vencida. Regularice su situación.")
+                else:
+                    st.session_state["paso_actual"] = "Test_Conductor"
+                    st.rerun()
                 
     with col_menu2:
         if st.button("📜 VER MI HISTORIAL", use_container_width=True): 
@@ -888,12 +945,9 @@ elif st.session_state["paso_actual"] == "Historial":
     st.subheader("📜 Historial Completo de Registros")
     st.info("Descargando su base de datos histórica...")
     try:
-        # LECTURA CON FRANCOTIRADOR: Solo descargamos lo estrictamente necesario
-        if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
-            # Si es chofer, Firebase SOLO lee sus propios viajes
+        if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR", "Control Documental"]:
             hist_ref = db.collection(COLECCION_VIAJES).where("Conductor", "==", st.session_state.get("nombre_empleado")).stream()
         else:
-            # Si es Admin, sí baja todo
             hist_ref = db.collection(COLECCION_VIAJES).stream()
             
         lista_historial = []
@@ -947,12 +1001,9 @@ if st.session_state.get("usuario_actual"):
             st.rerun()
 
     try:
-        # Solo descargamos los viajes activos, salvando la cuota de Firebase
         df_sb = obtener_viajes_activos_cached()
         
         if not df_sb.empty:
-            
-            # --- BLINDAJE DE MÉTRICAS (Filtra Cancelados y viajes > 24hs) ---
             rutas_validas = []
             ahora_radar = datetime.now(TZ_AR)
             
@@ -969,7 +1020,6 @@ if st.session_state.get("usuario_actual"):
                         
             df_r = pd.DataFrame(rutas_validas)
             
-            # PENDIENTES
             if 'Aprobacion' in df_sb.columns and 'Estado_Viaje' in df_sb.columns:
                 df_p = df_sb[
                     (df_sb['Aprobacion'].astype(str).str.contains("Pendiente", na=False)) & 
@@ -999,13 +1049,12 @@ if st.session_state.get("usuario_actual"):
                 else: 
                     st.write("✅ Ninguna.")
 
-            if st.session_state.get("usuario_actual") in ["ADMIN", "ADMINISTRADOR", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia"]:
+            if st.session_state.get("usuario_actual") in ["ADMIN", "ADMINISTRADOR", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "Control Documental"]:
                 with st.sidebar:
                     st.markdown("---")
                     st.subheader("📊 Consola Excel (Auditoría)")
                     st.warning("⚠️ Descargar el Excel consume lecturas de la base de datos. Utilice los filtros para ahorrar cuota.")
                     
-                    # --- FILTROS PREVIOS A LA DESCARGA ---
                     filtro_regional = st.text_input("Regional específica (dejar vacío para todas):", help="Ej: Oeste, Añelo, Mendoza").strip()
                     c_mes, c_anio = st.columns(2)
                     with c_mes: 
@@ -1016,7 +1065,6 @@ if st.session_state.get("usuario_actual"):
                     if st.button("📥 Generar Excel Histórico", use_container_width=True):
                         st.info("Buscando viajes en la nube...")
                         try:
-                            # 1. FILTRO EN FIREBASE (El Francotirador que ahorra lecturas reales)
                             if filtro_regional != "":
                                 tod_ref = db.collection(COLECCION_VIAJES).where("Regional", "==", filtro_regional).stream()
                             else:
@@ -1027,7 +1075,6 @@ if st.session_state.get("usuario_actual"):
                             
                             for doc in tod_ref:
                                 d = doc.to_dict()
-                                # --- CIERRE POR CONTINGENCIA (24hs) ---
                                 try:
                                     if str(d.get("Estado_Viaje", "")) in ["En viaje", "En espera"]:
                                         fecha_creacion = datetime.strptime(str(d.get("Fecha", "")), "%d/%m/%Y %H:%M:%S").replace(tzinfo=TZ_AR)
@@ -1042,7 +1089,6 @@ if st.session_state.get("usuario_actual"):
                             df_ex_full = pd.DataFrame(lista_excel)
                             
                             if not df_ex_full.empty:
-                                # 2. FILTRO LOCAL DE FECHAS (El filtrado en RAM es gratuito)
                                 if filtro_mes != "Todos" and filtro_anio != "Todos":
                                     mes_anio_buscado = f"/{filtro_mes}/{filtro_anio}"
                                     df_ex_full = df_ex_full[df_ex_full['Fecha'].astype(str).str.contains(mes_anio_buscado, na=False)]
@@ -1105,7 +1151,6 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR", "SUPERVISOR / COORDINADOR / INGENIERO",
     es_jefe_global = rol_bdj in ["ADMIN", "ADMINISTRADOR", "GERENCIA"]
     
     try:
-        # Usamos el radar eficiente. No descargamos los cancelados o finalizados.
         df_tod = obtener_viajes_activos_cached()
         if not df_tod.empty:
             df_pen = df_tod[
@@ -1168,7 +1213,7 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
             adm_base = st.text_input("Base Operativa:").strip()
             
         adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia", "Completacion"])
-        adm_rol = st.selectbox("Rol:", ["Conductor", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "ADMIN"])
+        adm_rol = st.selectbox("Rol:", ["Conductor", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "Control Documental", "ADMIN"])
         
         c_v1, c_v2, c_v3 = st.columns(3)
         with c_v1: 
@@ -1305,6 +1350,8 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
                                 r_of = "Jefe de Servicio"
                             elif "GERENCIA" in rol_ex: 
                                 r_of = "Gerencia"
+                            elif "CONTROL DOCUMENTAL" in rol_ex:
+                                r_of = "Control Documental"
                             elif "ADMIN" in rol_ex: 
                                 r_of = "ADMIN"
                                 
