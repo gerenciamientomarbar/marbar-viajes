@@ -125,7 +125,6 @@ def obtener_vehiculos_cached():
 
 @st.cache_resource(ttl=300)
 def obtener_viajes_activos_cached():
-    # LECTURA QUIRÚRGICA: Solo descargamos los viajes que están operando AHORA. 
     try:
         v_espera = db.collection(COLECCION_VIAJES).where("Estado_Viaje", "==", "En espera").stream()
         v_viaje = db.collection(COLECCION_VIAJES).where("Estado_Viaje", "==", "En viaje").stream()
@@ -155,7 +154,6 @@ def guardar_en_nube(datos_viaje):
     try:
         doc_id = str(datos_viaje.get("ID", 0))
         db.collection(COLECCION_VIAJES).document(doc_id).set(datos_viaje)
-        # Limpiamos la caché para que el nuevo viaje aparezca de inmediato
         st.cache_resource.clear()
         return True
     except Exception:
@@ -297,7 +295,6 @@ def generar_ficha_html(v_data):
 
 def parse_fecha(fecha_str):
     fecha_limpia = str(fecha_str).strip().upper()
-    # Si la fecha está vacía, es NaT, o N/A, devolvemos la fecha de hoy para no romper la app
     if fecha_limpia in ["NAT", "NAN", "N/A", "NONE", "NULL", ""]:
         return datetime.now(TZ_AR).date()
     try:
@@ -392,12 +389,11 @@ if st.session_state["usuario_actual"] is None:
         
         if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
             if correo_configurar != "":
-                # Intentamos forzar la creación de la cuenta en Firebase Auth por si no existe
                 try:
                     pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                     auth.create_user(email=correo_configurar, password=pass_temporal)
                 except Exception: 
-                    pass # Ignoramos el error si la cuenta ya existía
+                    pass
                     
                 url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY.strip()}"
                 try:
@@ -411,7 +407,6 @@ if st.session_state["usuario_actual"] is None:
             else: 
                 st.error("Escriba un correo válido.")
     
-    # Detenemos la ejecución si el usuario no ha iniciado sesión
     st.stop() 
 
 # --- WORKFLOW PRINCIPAL ---
@@ -488,13 +483,17 @@ if st.session_state["paso_actual"] == "Menu":
     # --- MÓDULO EXCLUSIVO DE CONTROL DOCUMENTAL ---
     if st.session_state.get("usuario_actual") in ["Control Documental", "ADMIN", "ADMINISTRADOR"]:
         with st.expander("📋 MÓDULO DE GESTIÓN Y EDICIÓN DOCUMENTAL", expanded=(st.session_state.get("usuario_actual") == "Control Documental")):
-            st.info("💡 Este panel permite actualizar vencimientos de habilitaciones sin alterar el registro histórico de viajes. Utilice la 'X' en la barra de búsqueda para limpiar el campo rápidamente.")
+            st.info("💡 Este panel permite actualizar vencimientos de habilitaciones sin alterar el registro histórico de viajes.")
             tab_doc_u, tab_doc_v = st.tabs(["👥 Habilitaciones de Personal", "🚘 Habilitaciones de Flota"])
             
             with tab_doc_u:
                 df_usr_doc = obtener_usuarios_cached()
                 if not df_usr_doc.empty:
-                    st.dataframe(df_usr_doc[['DNI_Usuario', 'Nombre', 'Email', 'Venc_Licencia', 'Venc_Defensiva', 'Venc_Def_Chile']], hide_index=True)
+                    cols_u = ['DNI_Usuario', 'Nombre', 'Email', 'Venc_Licencia', 'Venc_Defensiva', 'Venc_Def_Chile']
+                    for c in cols_u:
+                        if c not in df_usr_doc.columns:
+                            df_usr_doc[c] = "N/A"
+                    st.dataframe(df_usr_doc[cols_u], hide_index=True)
                     
                     opciones_usr = [f"{r.get('DNI_Usuario','')} - {r.get('Nombre','')}" for _, r in df_usr_doc.iterrows()]
                     
@@ -530,14 +529,17 @@ if st.session_state["paso_actual"] == "Menu":
                                 "Venc_Def_Chile": new_chile.strftime("%d/%m/%Y")
                             })
                             st.cache_resource.clear()
-                            st.session_state["edit_usr_sel"] = None # Resetea la barra de busqueda
                             st.success(f"✅ Vencimientos de {usr_datos.get('Nombre')} actualizados correctamente.")
                             st.rerun()
 
             with tab_doc_v:
                 df_veh_doc = obtener_vehiculos_cached()
                 if not df_veh_doc.empty:
-                    st.dataframe(df_veh_doc[['Vehiculo', 'Venc_VTV', 'Venc_Seguro']], hide_index=True)
+                    cols_v = ['Vehiculo', 'Venc_VTV', 'Venc_Seguro']
+                    for c in cols_v:
+                        if c not in df_veh_doc.columns:
+                            df_veh_doc[c] = "N/A"
+                    st.dataframe(df_veh_doc[cols_v], hide_index=True)
                     
                     opciones_veh = df_veh_doc['Vehiculo'].tolist()
                     veh_sel_edit = st.selectbox(
@@ -567,7 +569,6 @@ if st.session_state["paso_actual"] == "Menu":
                                 "Venc_Seguro": new_seg.strftime("%d/%m/%Y")
                             })
                             st.cache_resource.clear()
-                            st.session_state["edit_veh_sel"] = None # Resetea la barra de busqueda
                             st.success(f"✅ Documentación de la patente {veh_sel_edit} actualizada correctamente.")
                             st.rerun()
 
