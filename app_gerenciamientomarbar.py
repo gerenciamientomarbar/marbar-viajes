@@ -39,7 +39,9 @@ text_color = "#1F2937"
 
 st.markdown(f"""
 <style>
+    /* Ocultar elementos por defecto de Streamlit para un look corporativo */
     footer {{visibility: hidden;}}
+    
     .stApp {{ 
         background-color: #F3F4F6; 
     }}
@@ -123,6 +125,7 @@ def obtener_vehiculos_cached():
 
 @st.cache_resource(ttl=300)
 def obtener_viajes_activos_cached():
+    # LECTURA QUIRÚRGICA: Solo descargamos los viajes que están operando AHORA. 
     try:
         v_espera = db.collection(COLECCION_VIAJES).where("Estado_Viaje", "==", "En espera").stream()
         v_viaje = db.collection(COLECCION_VIAJES).where("Estado_Viaje", "==", "En viaje").stream()
@@ -152,6 +155,7 @@ def guardar_en_nube(datos_viaje):
     try:
         doc_id = str(datos_viaje.get("ID", 0))
         db.collection(COLECCION_VIAJES).document(doc_id).set(datos_viaje)
+        # Limpiamos la caché para que el nuevo viaje aparezca de inmediato
         st.cache_resource.clear()
         return True
     except Exception:
@@ -291,6 +295,12 @@ def generar_ficha_html(v_data):
     """
     return html
 
+def parse_fecha(fecha_str):
+    try:
+        return datetime.strptime(str(fecha_str), "%d/%m/%Y").date()
+    except Exception:
+        return datetime.now(TZ_AR).date()
+
 # --- GESTOR DE SESIÓN ---
 if "usuario_actual" not in st.session_state: 
     st.session_state["usuario_actual"] = None
@@ -378,11 +388,12 @@ if st.session_state["usuario_actual"] is None:
         
         if st.button("📧 Enviar Enlace de Configuración", use_container_width=True):
             if correo_configurar != "":
+                # Intentamos forzar la creación de la cuenta en Firebase Auth por si no existe
                 try:
                     pass_temporal = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
                     auth.create_user(email=correo_configurar, password=pass_temporal)
                 except Exception: 
-                    pass
+                    pass # Ignoramos el error si la cuenta ya existía
                     
                 url_reset = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={FIREBASE_API_KEY.strip()}"
                 try:
@@ -396,6 +407,7 @@ if st.session_state["usuario_actual"] is None:
             else: 
                 st.error("Escriba un correo válido.")
     
+    # Detenemos la ejecución si el usuario no ha iniciado sesión
     st.stop() 
 
 # --- WORKFLOW PRINCIPAL ---
@@ -403,7 +415,7 @@ if st.session_state["paso_actual"] == "Menu":
     st.subheader(f"Panel Operativo - Bienvenido, {st.session_state.get('nombre_empleado', 'Usuario')}")
     
     # --- Alertas de Vencimiento de Documentación ---
-    if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
+    if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR", "Control Documental"]:
         v_lic = st.session_state.get("venc_licencia", "N/A")
         v_def = st.session_state.get("venc_defensiva", "N/A")
         v_def_chile = st.session_state.get("venc_def_chile", "N/A")
@@ -472,7 +484,7 @@ if st.session_state["paso_actual"] == "Menu":
     # --- MÓDULO EXCLUSIVO DE CONTROL DOCUMENTAL ---
     if st.session_state.get("usuario_actual") in ["Control Documental", "ADMIN", "ADMINISTRADOR"]:
         with st.expander("📋 MÓDULO DE GESTIÓN Y EDICIÓN DOCUMENTAL", expanded=(st.session_state.get("usuario_actual") == "Control Documental")):
-            st.info("💡 Este panel permite actualizar vencimientos de habilitaciones sin alterar el registro histórico de viajes.")
+            st.info("💡 Este panel permite actualizar vencimientos de habilitaciones sin alterar el registro histórico de viajes. Utilice la 'X' en la barra de búsqueda para limpiar el campo rápidamente.")
             tab_doc_u, tab_doc_v = st.tabs(["👥 Habilitaciones de Personal", "🚘 Habilitaciones de Flota"])
             
             with tab_doc_u:
@@ -480,20 +492,32 @@ if st.session_state["paso_actual"] == "Menu":
                 if not df_usr_doc.empty:
                     st.dataframe(df_usr_doc[['DNI_Usuario', 'Nombre', 'Email', 'Venc_Licencia', 'Venc_Defensiva', 'Venc_Def_Chile']], hide_index=True)
                     
-                    opciones_usr = [""] + [f"{r.get('DNI_Usuario','')} - {r.get('Nombre','')}" for _, r in df_usr_doc.iterrows()]
-                    usr_sel_edit = st.selectbox("Seleccionar Operador a actualizar:", opciones_usr, key="edit_usr_sel")
+                    opciones_usr = [f"{r.get('DNI_Usuario','')} - {r.get('Nombre','')}" for _, r in df_usr_doc.iterrows()]
                     
-                    if usr_sel_edit != "":
+                    usr_sel_edit = st.selectbox(
+                        "Seleccionar Operador a actualizar:", 
+                        opciones_usr, 
+                        index=None, 
+                        placeholder="Escriba el nombre o DNI del operador...", 
+                        key="edit_usr_sel"
+                    )
+                    
+                    if usr_sel_edit:
                         dni_edit = str(usr_sel_edit.split(" - ")[0])
                         usr_datos = df_usr_doc[df_usr_doc['DNI_Usuario'].astype(str) == dni_edit].iloc[0]
                         
+                        # Precarga de fechas actuales
+                        cur_lic = parse_fecha(usr_datos.get('Venc_Licencia', ''))
+                        cur_def = parse_fecha(usr_datos.get('Venc_Defensiva', ''))
+                        cur_chi = parse_fecha(usr_datos.get('Venc_Def_Chile', ''))
+                        
                         col_ed1, col_ed2, col_ed3 = st.columns(3)
                         with col_ed1:
-                            new_lic = st.date_input("Nuevo Venc. Carnet:", value=datetime.now(TZ_AR).date(), key="ed_lic")
+                            new_lic = st.date_input("Nuevo Venc. Carnet:", value=cur_lic, format="DD/MM/YYYY", key="ed_lic")
                         with col_ed2:
-                            new_def = st.date_input("Nuevo Venc. Defensiva:", value=datetime.now(TZ_AR).date(), key="ed_def")
+                            new_def = st.date_input("Nuevo Venc. Defensiva:", value=cur_def, format="DD/MM/YYYY", key="ed_def")
                         with col_ed3:
-                            new_chile = st.date_input("Nuevo Venc. Defensiva Chile:", value=datetime.now(TZ_AR).date(), key="ed_chile")
+                            new_chile = st.date_input("Nuevo Venc. Defensiva Chile:", value=cur_chi, format="DD/MM/YYYY", key="ed_chile")
                             
                         if st.button("💾 Actualizar Fechas del Operador", key="btn_save_usr_doc"):
                             db.collection("usuarios").document(dni_edit).update({
@@ -502,6 +526,7 @@ if st.session_state["paso_actual"] == "Menu":
                                 "Venc_Def_Chile": new_chile.strftime("%d/%m/%Y")
                             })
                             st.cache_resource.clear()
+                            st.session_state["edit_usr_sel"] = None # Resetea la barra de busqueda
                             st.success(f"✅ Vencimientos de {usr_datos.get('Nombre')} actualizados correctamente.")
                             st.rerun()
 
@@ -510,16 +535,27 @@ if st.session_state["paso_actual"] == "Menu":
                 if not df_veh_doc.empty:
                     st.dataframe(df_veh_doc[['Vehiculo', 'Venc_VTV', 'Venc_Seguro']], hide_index=True)
                     
-                    opciones_veh = [""] + df_veh_doc['Vehiculo'].tolist()
-                    veh_sel_edit = st.selectbox("Seleccionar Unidad a actualizar:", opciones_veh, key="edit_veh_sel")
+                    opciones_veh = df_veh_doc['Vehiculo'].tolist()
+                    veh_sel_edit = st.selectbox(
+                        "Seleccionar Unidad a actualizar:", 
+                        opciones_veh, 
+                        index=None, 
+                        placeholder="Escriba la patente o el número de interno...", 
+                        key="edit_veh_sel"
+                    )
                     
-                    if veh_sel_edit != "":
+                    if veh_sel_edit:
                         v_datos = df_veh_doc[df_veh_doc['Vehiculo'] == veh_sel_edit].iloc[0]
+                        
+                        # Precarga de fechas actuales
+                        cur_vtv = parse_fecha(v_datos.get('Venc_VTV', ''))
+                        cur_seg = parse_fecha(v_datos.get('Venc_Seguro', ''))
+                        
                         col_v1, col_v2 = st.columns(2)
                         with col_v1:
-                            new_vtv = st.date_input("Nuevo Venc. VTV:", value=datetime.now(TZ_AR).date(), key="ed_vtv")
+                            new_vtv = st.date_input("Nuevo Venc. VTV:", value=cur_vtv, format="DD/MM/YYYY", key="ed_vtv")
                         with col_v2:
-                            new_seg = st.date_input("Nuevo Venc. Seguro:", value=datetime.now(TZ_AR).date(), key="ed_seg")
+                            new_seg = st.date_input("Nuevo Venc. Seguro:", value=cur_seg, format="DD/MM/YYYY", key="ed_seg")
                             
                         if st.button("💾 Actualizar Fechas de la Unidad", key="btn_save_veh_doc"):
                             db.collection("vehiculos").document(veh_sel_edit).update({
@@ -527,6 +563,7 @@ if st.session_state["paso_actual"] == "Menu":
                                 "Venc_Seguro": new_seg.strftime("%d/%m/%Y")
                             })
                             st.cache_resource.clear()
+                            st.session_state["edit_veh_sel"] = None # Resetea la barra de busqueda
                             st.success(f"✅ Documentación de la patente {veh_sel_edit} actualizada correctamente.")
                             st.rerun()
 
@@ -1259,8 +1296,14 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
         df_u = obtener_usuarios_cached()
         if not df_u.empty:
             st.dataframe(df_u, hide_index=True)
-            lista_b = [""] + [str(r.get("DNI_Usuario", "")) for _, r in df_u.iterrows() if str(r.get("Rol", "")) not in ["ADMIN", "ADMINISTRADOR"]]
-            elim_u = st.selectbox("Borrar Perfil (DNI):", lista_b)
+            
+            lista_b = [str(r.get("DNI_Usuario", "")) for _, r in df_u.iterrows() if str(r.get("Rol", "")) not in ["ADMIN", "ADMINISTRADOR"]]
+            elim_u = st.selectbox(
+                "Borrar Perfil (DNI):", 
+                lista_b, 
+                index=None, 
+                placeholder="Seleccione DNI para borrar..."
+            )
             
             if st.button("❌ Dar de Baja") and elim_u: 
                 db.collection("usuarios").document(elim_u).delete()
@@ -1287,8 +1330,14 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
         df_v = obtener_vehiculos_cached()
         if not df_v.empty:
             st.dataframe(df_v, hide_index=True)
-            lista_veh_borrar = [""] + df_v["Vehiculo"].tolist()
-            elim_v = st.selectbox("Borrar Equipo:", lista_veh_borrar)
+            
+            lista_veh_borrar = df_v["Vehiculo"].tolist()
+            elim_v = st.selectbox(
+                "Borrar Equipo:", 
+                lista_veh_borrar, 
+                index=None, 
+                placeholder="Seleccione patente para borrar..."
+            )
             
             if st.button("❌ Retirar Unidad") and elim_v: 
                 db.collection("vehiculos").document(elim_v).delete()
