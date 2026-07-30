@@ -296,8 +296,12 @@ def generar_ficha_html(v_data):
     return html
 
 def parse_fecha(fecha_str):
+    fecha_limpia = str(fecha_str).strip().upper()
+    # Si la fecha está vacía, es NaT, o N/A, devolvemos la fecha de hoy para no romper la app
+    if fecha_limpia in ["NAT", "NAN", "N/A", "NONE", "NULL", ""]:
+        return datetime.now(TZ_AR).date()
     try:
-        return datetime.strptime(str(fecha_str), "%d/%m/%Y").date()
+        return datetime.strptime(fecha_limpia, "%d/%m/%Y").date()
     except Exception:
         return datetime.now(TZ_AR).date()
 
