@@ -323,7 +323,7 @@ if st.session_state["usuario_actual"] is None:
     col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
     with col_logo2:
         if os.path.exists("logo.png"): 
-            st.image("logo.png", use_column_width=True)
+            st.image("logo.png", use_container_width=True)
         else:
             st.warning("⚠️ Falta 'logo.png'")
     
