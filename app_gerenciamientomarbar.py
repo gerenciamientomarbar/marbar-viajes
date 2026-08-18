@@ -1030,7 +1030,7 @@ elif st.session_state["paso_actual"] == "Historial":
 if st.session_state.get("usuario_actual"):
     with st.sidebar:
         if os.path.exists("logo.png"): 
-            st.image("logo.png", use_column_width=True)
+            st.image("logo.png", use_container_width=True)
             
         st.header("📊 SSA & Logística")
         
