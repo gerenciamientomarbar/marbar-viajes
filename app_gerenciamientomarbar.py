@@ -512,10 +512,13 @@ if st.session_state["paso_actual"] == "Menu":
                     for col in ['Venc_Licencia', 'Venc_Defensiva', 'Venc_Def_Chile']:
                         df_usr_doc[col + "_orden"] = pd.to_datetime(df_usr_doc[col], format="%d/%m/%Y", errors='coerce')
                     
-                    # 2. Ordenamos por el vencimiento más urgente del Carnet de Manejo
-                    df_usr_doc = df_usr_doc.sort_values(by='Venc_Licencia_orden', ascending=True)
+                    # 2. DETECTOR DE URGENCIAS: Compara las 3 fechas y se queda con la más antigua/vencida
+                    df_usr_doc['Venc_Mas_Urgente'] = df_usr_doc[['Venc_Licencia_orden', 'Venc_Defensiva_orden', 'Venc_Def_Chile_orden']].min(axis=1)
                     
-                    # 3. Pintamos la tabla y la mostramos (ocultando las columnas de orden)
+                    # 3. Ordenamos la lista usando esa fecha más urgente (los "Sin Datos" van al fondo)
+                    df_usr_doc = df_usr_doc.sort_values(by='Venc_Mas_Urgente', ascending=True, na_position='last')
+                    
+                    # 4. Pintamos la tabla y la mostramos
                     columnas_visibles = ['DNI_Usuario', 'Nombre', 'Email', 'Venc_Licencia', 'Venc_Defensiva', 'Venc_Def_Chile']
                     df_pintado = df_usr_doc[columnas_visibles].style.map(
                         aplicar_semaforo_fechas, 
