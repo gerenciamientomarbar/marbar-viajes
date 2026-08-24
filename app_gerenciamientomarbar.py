@@ -1295,17 +1295,16 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR"]:
         
         col_r, col_b = st.columns(2)
         with col_r: 
-            # Estas son las opciones que aparecerán en el menú desplegable
-            lista_regiones = ["Sede Central", "Oeste", "Mendoza", "Rincón de Los Sauces", "Loma Campana", "Neuquén"]
-            
-            # Esto crea el menú donde puedes elegir varias opciones
+            # Actualizamos las regionales a las 3 opciones oficiales
+            lista_regiones = ["SUR", "OESTE", "CHILE"]
             regiones_elegidas = st.multiselect("Regionales a Cargo:", lista_regiones)
-            
-            # Esto toma lo que elegiste y lo junta en un solo texto separado por comas para guardarlo fácil
             adm_regional = ", ".join(regiones_elegidas)
             
         with col_b: 
-            adm_base = st.text_input("Base Operativa:").strip()
+            # Convertimos las bases en un menú múltiple con tus opciones
+            lista_bases = ["Punta Arenas", "Pico Truncado", "Comodoro Rivadavia", "RDLS", "MENDOZA", "NEUQUEN"]
+            bases_elegidas = st.multiselect("Bases Operativas a Cargo:", lista_bases)
+            adm_base = ", ".join(bases_elegidas)
             
         adm_sector = st.selectbox("Sector:", ["Higiene y Seguridad", "Logistica", "Fluidos", "Control de solidos", "Mantenimiento", "Gerencia", "Completacion"])
         adm_rol = st.selectbox("Rol:", ["Conductor", "Supervisor / Coordinador / Ingeniero", "Jefe de Servicio", "Gerencia", "Control Documental", "ADMIN"])
