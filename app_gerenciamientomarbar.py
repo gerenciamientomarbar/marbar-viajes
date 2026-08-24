@@ -302,6 +302,21 @@ def parse_fecha(fecha_str):
     except Exception:
         return datetime.now(TZ_AR).date()
 
+def aplicar_semaforo_fechas(val):
+    try:
+        fecha_venc = datetime.strptime(str(val).strip(), "%d/%m/%Y").date()
+        hoy = datetime.now(TZ_AR).date()
+        dias_restantes = (fecha_venc - hoy).days
+        
+        if dias_restantes < 0:
+            return 'background-color: #fee2e2; color: #991b1b; font-weight: bold;'
+        elif dias_restantes <= 30:
+            return 'background-color: #fef3c7; color: #92400e; font-weight: bold;'
+        else:
+            return 'background-color: #dcfce3; color: #166534;'
+    except Exception:
+        return ''
+
 # --- GESTOR DE SESIÓN ---
 if "usuario_actual" not in st.session_state: 
     st.session_state["usuario_actual"] = None
