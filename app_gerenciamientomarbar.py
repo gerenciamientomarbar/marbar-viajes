@@ -569,13 +569,22 @@ if st.session_state["paso_actual"] == "Menu":
                             new_chile = st.date_input("Nuevo Venc. Defensiva Chile:", value=cur_chi, format="DD/MM/YYYY", key="ed_chile")
                             
                         if st.button("💾 Actualizar Fechas del Operador", key="btn_save_usr_doc"):
+                            # 1. Guarda los cambios en la base de datos
                             db.collection("usuarios").document(dni_edit).update({
                                 "Venc_Licencia": new_lic.strftime("%d/%m/%Y"),
                                 "Venc_Defensiva": new_def.strftime("%d/%m/%Y"),
                                 "Venc_Def_Chile": new_chile.strftime("%d/%m/%Y")
                             })
+                            
+                            # 2. NUEVO: Usa la máquina de recibos silenciosos
+                            usuario_auditor = str(st.session_state.get('nombre_empleado', 'Desconocido'))
+                            nombre_chofer = str(usr_datos.get('Nombre', 'Sin nombre'))
+                            detalle_recibo = f"Actualizó Vencimientos de personal: {nombre_chofer} (DNI: {dni_edit})"
+                            registrar_auditoria(usuario_auditor, "MODIFICAR PERSONAL", detalle_recibo)
+                            
+                            # 3. Limpia la pantalla y avisa que todo salió bien
                             st.cache_resource.clear()
-                            st.success(f"✅ Vencimientos de {usr_datos.get('Nombre')} actualizados correctamente.")
+                            st.success(f"✅ Vencimientos de {nombre_chofer} actualizados correctamente.")
                             st.rerun()
 
             with tab_doc_v:
