@@ -508,7 +508,21 @@ if st.session_state["paso_actual"] == "Menu":
                     for c in cols_u:
                         if c not in df_usr_doc.columns:
                             df_usr_doc[c] = "N/A"
-                    st.dataframe(df_usr_doc[cols_u], hide_index=True)
+                    # 1. Transformamos temporalmente las fechas a formato de sistema para ordenarlas
+                    for col in ['Venc_Licencia', 'Venc_Defensiva', 'Venc_Def_Chile']:
+                        df_usr_doc[col + "_orden"] = pd.to_datetime(df_usr_doc[col], format="%d/%m/%Y", errors='coerce')
+                    
+                    # 2. Ordenamos por el vencimiento más urgente del Carnet de Manejo
+                    df_usr_doc = df_usr_doc.sort_values(by='Venc_Licencia_orden', ascending=True)
+                    
+                    # 3. Pintamos la tabla y la mostramos (ocultando las columnas de orden)
+                    columnas_visibles = ['DNI_Usuario', 'Nombre', 'Email', 'Venc_Licencia', 'Venc_Defensiva', 'Venc_Def_Chile']
+                    df_pintado = df_usr_doc[columnas_visibles].style.map(
+                        aplicar_semaforo_fechas, 
+                        subset=['Venc_Licencia', 'Venc_Defensiva', 'Venc_Def_Chile']
+                    )
+                    
+                    st.dataframe(df_pintado, hide_index=True)
                     
                     opciones_usr = [f"{r.get('DNI_Usuario','')} - {r.get('Nombre','')}" for _, r in df_usr_doc.iterrows()]
                     
