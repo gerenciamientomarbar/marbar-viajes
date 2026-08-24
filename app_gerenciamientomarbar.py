@@ -629,10 +629,6 @@ if st.session_state["paso_actual"] == "Menu":
         if st.session_state.get("usuario_actual") == "Control Documental":
             st.info("🔒 Perfil asignado a Control Documental (Gestión exclusiva de vencimientos).")
         else:
-            with col_menu1:
-            if st.session_state.get("usuario_actual") == "Control Documental":
-            st.info("🔒 Perfil asignado a Control Documental (Gestión exclusiva de vencimientos).")
-        else:
             if st.button("🚀 NUEVO GERENCIAMIENTO DE VIAJE", use_container_width=True): 
                 
                 # 1. CONTROL ESTRICTO: ¿TIENE UN VIAJE ABIERTO?
