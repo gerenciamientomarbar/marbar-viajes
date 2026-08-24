@@ -619,10 +619,18 @@ if st.session_state["paso_actual"] == "Menu":
                             new_seg = st.date_input("Nuevo Venc. Seguro:", value=cur_seg, format="DD/MM/YYYY", key="ed_seg")
                             
                         if st.button("💾 Actualizar Fechas de la Unidad", key="btn_save_veh_doc"):
+                            # 1. Guarda los cambios de la unidad en la base de datos
                             db.collection("vehiculos").document(veh_sel_edit).update({
                                 "Venc_VTV": new_vtv.strftime("%d/%m/%Y"),
                                 "Venc_Seguro": new_seg.strftime("%d/%m/%Y")
                             })
+                            
+                            # 2. NUEVO: Usa la máquina de recibos silenciosos
+                            usuario_auditor = str(st.session_state.get('nombre_empleado', 'Desconocido'))
+                            detalle_recibo = f"Actualizó Vencimientos de unidad: patente {veh_sel_edit}"
+                            registrar_auditoria(usuario_auditor, "MODIFICAR VEHICULO", detalle_recibo)
+                            
+                            # 3. Limpia la pantalla y avisa que todo salió bien
                             st.cache_resource.clear()
                             st.success(f"✅ Documentación de la patente {veh_sel_edit} actualizada correctamente.")
                             st.rerun()
