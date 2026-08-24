@@ -1233,8 +1233,11 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR", "SUPERVISOR / COORDINADOR / INGENIERO",
     }
     mi_nivel = mapa_autoridad_bdj.get(rol_bdj, 0)
     
-    mi_reg = str(st.session_state.get("regional_empleado", "")).strip().lower()
+    # 1. Leemos los permisos del supervisor que inició sesión
     mi_sec = str(st.session_state.get("sector_empleado", "")).strip().lower()
+    mis_regionales = str(st.session_state.get("regional_empleado", "")).lower()
+    mis_bases = str(st.session_state.get("base_empleado", "")).lower()
+    
     es_jefe_global = rol_bdj in ["ADMIN", "ADMINISTRADOR", "GERENCIA"]
     
     try:
@@ -1248,10 +1251,19 @@ if rol_bdj in ["ADMIN", "ADMINISTRADOR", "SUPERVISOR / COORDINADOR / INGENIERO",
             p_list = []
             for _, v_data in df_pen.iterrows():
                 v_dict = v_data.to_dict()
-                v_reg = str(v_dict.get("Regional", "")).strip().lower()
-                v_sec = str(v_dict.get("Sector", "")).strip().lower()
                 
-                if es_jefe_global or (v_reg == mi_reg and v_sec == mi_sec): 
+                # 2. Leemos la etiqueta del viaje (a qué sector, regional y base pertenece)
+                v_sec = str(v_dict.get("Sector", "")).strip().lower()
+                v_reg = str(v_dict.get("Regional", "")).strip().lower()
+                v_base = str(v_dict.get("Base", "")).strip().lower()
+                
+                # 3. Revisamos los 3 candados
+                candado_1 = (v_sec == mi_sec)
+                candado_2 = (v_reg in mis_regionales)
+                candado_3 = (v_base in mis_bases)
+                
+                # 4. Si es jefe global pasa de largo. Si es supervisor, deben abrirse los 3 candados
+                if es_jefe_global or (candado_1 and candado_2 and candado_3): 
                     p_list.append(v_dict)
             
             if len(p_list) > 0:
