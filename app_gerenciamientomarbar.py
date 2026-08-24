@@ -317,6 +317,20 @@ def aplicar_semaforo_fechas(val):
     except Exception:
         return ''
 
+def registrar_auditoria(usuario, accion, detalle):
+    try:
+        hora_str = datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
+        datos_recibo = {
+            "Fecha": hora_str,
+            "Usuario": usuario,
+            "Accion": accion,
+            "Detalle": detalle
+        }
+        # Guardamos el recibo en una carpeta nueva y oculta
+        db.collection("auditoria_documental").add(datos_recibo)
+    except Exception:
+        pass # Si el recibo falla por algo del internet, pasa de largo sin frenar la app
+
 # --- GESTOR DE SESIÓN ---
 if "usuario_actual" not in st.session_state: 
     st.session_state["usuario_actual"] = None
