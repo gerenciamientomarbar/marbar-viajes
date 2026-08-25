@@ -686,43 +686,45 @@ if st.session_state["paso_actual"] == "Menu":
         if st.session_state.get("usuario_actual") == "Control Documental":
             st.info("🔒 Perfil asignado a Control Documental (Gestión exclusiva de vencimientos).")
         else:
-            if st.button("🚀 NUEVO GERENCIAMIENTO DE VIAJE", use_container_width=True): 
+            # 1. EL GUARDIA REVISA AFUERA: ¿Tiene un viaje abierto?
+            tiene_viaje_activo = False
+            if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
+                df_activos = obtener_viajes_activos_cached()
+                if not df_activos.empty:
+                    mis_activos = df_activos[(df_activos["Conductor"] == st.session_state.get("nombre_empleado"))]
+                    if not mis_activos.empty:
+                        tiene_viaje_activo = True
+            
+            # 2. EL GUARDIA REVISA AFUERA: ¿Tiene documentación vencida?
+            documentacion_vencida = False
+            if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
+                hoy_dt = datetime.now(TZ_AR).date()
+                fechas_a_evaluar = [
+                    st.session_state.get("venc_licencia"), 
+                    st.session_state.get("venc_defensiva"), 
+                    st.session_state.get("venc_def_chile")
+                ]
+                for fecha_str in fechas_a_evaluar:
+                    if fecha_str and str(fecha_str) not in ["N/A", "NAT", "NAN", "NONE", "NULL", ""]:
+                        try:
+                            fecha_parseada = datetime.strptime(str(fecha_str), "%d/%m/%Y").date()
+                            if (fecha_parseada - hoy_dt).days < 0: 
+                                documentacion_vencida = True
+                        except Exception: pass
+            
+            # 3. Decidimos si el botón debe estar "apagado"
+            boton_apagado = tiene_viaje_activo or documentacion_vencida
+            
+            # 4. Pintamos el botón. Si boton_apagado es True, se pondrá gris y no funcionará.
+            if st.button("🚀 NUEVO GERENCIAMIENTO DE VIAJE", use_container_width=True, disabled=boton_apagado): 
+                st.session_state["paso_actual"] = "Test_Conductor"
+                st.rerun()
                 
-                # 1. CONTROL ESTRICTO: ¿TIENE UN VIAJE ABIERTO?
-                tiene_viaje_activo = False
-                if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
-                    df_activos = obtener_viajes_activos_cached()
-                    if not df_activos.empty:
-                        mis_activos = df_activos[(df_activos["Conductor"] == st.session_state.get("nombre_empleado"))]
-                        if not mis_activos.empty:
-                            tiene_viaje_activo = True
-                
-                # 2. CONTROL ESTRICTO: ¿TIENE DOCUMENTACIÓN VENCIDA?
-                documentacion_vencida = False
-                if st.session_state.get("usuario_actual") not in ["ADMIN", "ADMINISTRADOR"]:
-                    hoy_dt = datetime.now(TZ_AR).date()
-                    fechas_a_evaluar = [
-                        st.session_state.get("venc_licencia"), 
-                        st.session_state.get("venc_defensiva"), 
-                        st.session_state.get("venc_def_chile")
-                    ]
-                    for fecha_str in fechas_a_evaluar:
-                        if fecha_str and str(fecha_str) not in ["N/A", "NAT", "NAN", "NONE", "NULL", ""]:
-                            try:
-                                fecha_parseada = datetime.strptime(str(fecha_str), "%d/%m/%Y").date()
-                                if (fecha_parseada - hoy_dt).days < 0: 
-                                    documentacion_vencida = True
-                            except Exception: pass
-                                
-                # 3. VEREDICTO FINAL PARA DEJARLO PASAR
-                if tiene_viaje_activo:
-                    st.error("⛔ **ACCESO DENEGADO:** Ya tiene un viaje en curso o pendiente de aprobación. Debe informar su llegada o cancelarlo antes de iniciar uno nuevo.")
-                elif documentacion_vencida: 
-                    st.error("⛔ **ACCESO DENEGADO:** Tiene documentación habilitante vencida. Regularice su situación.")
-                else:
-                    # Si pasó todos los controles, lo dejamos arrancar
-                    st.session_state["paso_actual"] = "Test_Conductor"
-                    st.rerun()
+            # 5. Mostramos un mensajito debajo explicando por qué está apagado
+            if tiene_viaje_activo:
+                st.error("⛔ No puede iniciar un viaje nuevo porque ya tiene uno en curso o pendiente.")
+            elif documentacion_vencida: 
+                st.error("⛔ No puede iniciar un viaje. Tiene documentación habilitante vencida.")
                 
     with col_menu2:
         if st.button("📜 VER MI HISTORIAL", use_container_width=True): 
