@@ -469,18 +469,12 @@ if st.session_state["paso_actual"] == "Menu":
     # --- SISTEMA DE ALERTAS PERSISTENTES POR WHATSAPP ---
     if "alerta_nuevo_viaje" in st.session_state:
         v_new = st.session_state["alerta_nuevo_viaje"]
-        if v_new['color'] == "green":
-            cabecera_wa = f"🟢 *VIAJE AUTO-APROBADO ID {v_new['id']}*"
-        else:
-            cabecera_wa = f"🔴 *NUEVA SOLICITUD ID {v_new['id']}*"
-            
-        tkt = f"{cabecera_wa}\n\n🔹 *Conductor:* {v_new['conductor']}\n🔹 *Vehículo:* {v_new['vehiculo']}\n🔹 *Origen:* {v_new['origen']}\n🔹 *Destino:* {v_new['destino']}\n🔹 *Riesgo:* Nivel {v_new['nivel']}"
-        link_nuevo_wa = f"https://wa.me/?text={urllib.parse.quote(tkt)}"
         
+        # Solo mostramos el cartel verde de éxito
         st.success(f"✅ ¡Viaje registrado con éxito en el sistema (ID {v_new['id']})!")
-        st.markdown(f"### [📱 ENVIAR TICKET DE VIAJE POR WHATSAPP]({link_nuevo_wa})")
         
-        if st.button("Ocultar Alerta de Ticket", key="ocultar_nuevo_viaje"):
+        # Y dejamos el botón para ocultarlo
+        if st.button("Ocultar Alerta", key="ocultar_nuevo_viaje"):
             del st.session_state["alerta_nuevo_viaje"]
             st.rerun()
         st.markdown("---")
