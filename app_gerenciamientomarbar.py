@@ -584,20 +584,25 @@ if st.session_state["paso_actual"] == "Menu":
             with tab_doc_v:
                 df_veh_doc = obtener_vehiculos_cached()
                 if not df_veh_doc.empty:
-                    cols_v = ['Vehiculo', 'Venc_VTV', 'Venc_Seguro']
-                    for c in cols_v:
-                        if c not in df_veh_doc.columns:
-                            df_veh_doc[c] = "N/A"
-                    st.dataframe(df_veh_doc[cols_v], hide_index=True)
+                    # 1. Transformamos las fechas a formato de sistema para ordenarlas cronológicamente
+                    for col in ['Venc_VTV', 'Venc_Seguro']:
+                        df_veh_doc[col + "_orden"] = pd.to_datetime(df_veh_doc[col], format="%d/%m/%Y", errors='coerce')
                     
-                    opciones_veh = df_veh_doc['Vehiculo'].tolist()
-                    veh_sel_edit = st.selectbox(
-                        "Seleccionar Unidad a actualizar:", 
-                        opciones_veh, 
-                        index=None, 
-                        placeholder="Escriba la patente o el número de interno...", 
-                        key="edit_veh_sel"
+                    # 2. Ordenamos por el vencimiento más urgente de la VTV
+                    df_veh_doc = df_veh_doc.sort_values(by='Venc_VTV_orden', ascending=True)
+                    
+                    # 3. Pintamos la tabla con el semáforo y la mostramos
+                    columnas_visibles_veh = ['Vehiculo', 'Venc_VTV', 'Venc_Seguro']
+                    df_pintado_veh = df_veh_doc[columnas_visibles_veh].style.map(
+                        aplicar_semaforo_fechas, 
+                        subset=['Venc_VTV', 'Venc_Seguro']
                     )
+                    
+                    st.dataframe(df_pintado_veh, hide_index=True)
+                    
+                    # 4. Selector de patente (ordenado alfabéticamente para facilitar la búsqueda)
+                    opciones_veh = [""] + sorted(df_veh_doc['Vehiculo'].tolist())
+                    veh_sel_edit = st.selectbox("Seleccionar Unidad a actualizar:", opciones_veh, key="edit_veh_sel")
                     
                     if veh_sel_edit:
                         v_datos = df_veh_doc[df_veh_doc['Vehiculo'] == veh_sel_edit].iloc[0]
