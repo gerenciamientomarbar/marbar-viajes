@@ -151,9 +151,14 @@ def obtener_siguiente_id():
         return 1
 
 def guardar_en_nube(datos_viaje):
+    import time # Inyectamos la librería de control de tiempo
     try:
         doc_id = str(datos_viaje.get("ID", 0))
         db.collection(COLECCION_VIAJES).document(doc_id).set(datos_viaje)
+        
+        # --- SOLUCIÓN: Micro-pausa para permitir la indexación de Firebase ---
+        time.sleep(1.5) 
+        
         st.cache_resource.clear()
         return True
     except Exception:
