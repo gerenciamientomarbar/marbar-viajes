@@ -672,19 +672,23 @@ if st.session_state["paso_actual"] == "Menu":
                         col_accion, col_canc = st.columns(2)
                         
                         if col_accion.button(f"🏁 Informar Llegada", key=f"menu_fin_{v_id}", use_container_width=True):
+                            import time
                             db.collection(COLECCION_VIAJES).document(v_id).update({
                                 "Estado_Viaje": "Finalizado", 
                                 "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                             })
+                            time.sleep(1.5) # Micro-pausa de sincronización
                             st.cache_resource.clear() 
                             st.session_state["alerta_llegada"] = {"id": v_id, "destino": v_dest}
                             st.rerun()
                             
                         if col_canc.button(f"❌ Cancelar Viaje", key=f"menu_canc_{v_id}", use_container_width=True):
+                            import time
                             db.collection(COLECCION_VIAJES).document(v_id).update({
                                 "Estado_Viaje": "Cancelado", 
                                 "Fecha_Fin": datetime.now(TZ_AR).strftime("%d/%m/%Y %H:%M:%S")
                             })
+                            time.sleep(1.5) # Micro-pausa de sincronización
                             st.cache_resource.clear() 
                             st.session_state["alerta_cancelacion"] = {"id": v_id, "destino": v_dest}
                             st.rerun()
